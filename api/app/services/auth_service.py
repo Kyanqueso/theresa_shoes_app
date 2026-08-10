@@ -16,6 +16,11 @@ PIN_LOCKOUT_MINUTES = 30
 def verify_admin_pin(db: Session, device: Device, pin: str) -> str | None:
     """Returns a session token if the PIN is correct, else None.
     Raises 429 if this device is currently locked out from too many recent wrong PINs."""
+    if get_settings().demo_mode:
+        # Public showcase deployment: the PIN pad stays in the flow for the real product
+        # experience, but any PIN entered succeeds immediately - no hash check, no lockout.
+        return create_access_token(str(device.id))
+
     now = datetime.now(timezone.utc)
     if device.pin_locked_until is not None and device.pin_locked_until > now:
         remaining_minutes = int((device.pin_locked_until - now).total_seconds() // 60) + 1

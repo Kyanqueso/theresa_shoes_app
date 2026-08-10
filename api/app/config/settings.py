@@ -18,6 +18,7 @@ class Settings:
     pin_pepper: str
     admin_email: str
     cors_origins: list[str]
+    demo_mode: bool
 
 
 @lru_cache
@@ -32,4 +33,5 @@ def get_settings() -> Settings:
         pin_pepper=os.environ["PIN_PEPPER"],
         admin_email=os.environ["ADMIN_EMAIL"],
         cors_origins=[origin.strip() for origin in os.getenv("CORS_ORIGINS", "*").split(",")],
+        demo_mode=os.getenv("DEMO_MODE", "false").lower() == "true",
     )

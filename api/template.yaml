@@ -28,6 +28,10 @@ Parameters:
   CorsOrigins:
     Type: String
     Default: "*"
+  DemoMode:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
 
 Globals:
   Function:
@@ -52,6 +56,7 @@ Resources:
           PIN_PEPPER: !Ref PinPepper
           ADMIN_EMAIL: !Ref AdminEmail
           CORS_ORIGINS: !Ref CorsOrigins
+          DEMO_MODE: !Ref DemoMode
       Events:
         ApiProxy:
           Type: HttpApi
