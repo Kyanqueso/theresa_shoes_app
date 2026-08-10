@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+@theme {
+  --font-serif-display: "Playfair Display", ui-serif, Georgia, serif;
+  --font-lato: "Lato", sans-serif;
+  --color-primary: #3a0d1f;
+  --color-black: #000000;
+  --color-gold: #f5d90a;
+  --color-accent: #efe9e1;
+  --color-danger: #dc2626;
+  --color-success: #15803d;
+  --color-golden-brown: #a67d44;
+}
+
+body {
+  font-family: var(--font-lato);
+}
+
+@layer base {
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+}

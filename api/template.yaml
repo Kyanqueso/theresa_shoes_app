@@ -1,0 +1,70 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Theresa Shoes API - FastAPI on Lambda via Mangum, behind an HTTP API Gateway
+
+Parameters:
+  DatabaseUrl:
+    Type: String
+    NoEcho: true
+  SupabaseUrl:
+    Type: String
+  SupabaseServiceKey:
+    Type: String
+    NoEcho: true
+  JwtSecret:
+    Type: String
+    NoEcho: true
+  JwtAlgorithm:
+    Type: String
+    Default: HS256
+  JwtExpireMinutes:
+    Type: String
+    Default: "60"
+  PinPepper:
+    Type: String
+    NoEcho: true
+  AdminEmail:
+    Type: String
+  CorsOrigins:
+    Type: String
+    Default: "*"
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 512
+    Runtime: python3.13
+
+Resources:
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: app.main.handler
+      Environment:
+        Variables:
+          DATABASE_URL: !Ref DatabaseUrl
+          SUPABASE_URL: !Ref SupabaseUrl
+          SUPABASE_SERVICE_KEY: !Ref SupabaseServiceKey
+          JWT_SECRET: !Ref JwtSecret
+          JWT_ALGORITHM: !Ref JwtAlgorithm
+          JWT_EXPIRE_MINUTES: !Ref JwtExpireMinutes
+          PIN_PEPPER: !Ref PinPepper
+          ADMIN_EMAIL: !Ref AdminEmail
+          CORS_ORIGINS: !Ref CorsOrigins
+      Events:
+        ApiProxy:
+          Type: HttpApi
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+        ApiRoot:
+          Type: HttpApi
+          Properties:
+            Path: /
+            Method: ANY
+
+Outputs:
+  ApiUrl:
+    Description: Base URL of the deployed API
+    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com"
