@@ -21,3 +21,5 @@ samconfig.toml
 
 # Claude Code local state
 .claude/
+.vercel
+.env*
