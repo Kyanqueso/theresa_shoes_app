@@ -19,7 +19,7 @@ samconfig.toml
 # OS
 .DS_Store
 
-# Claude Code local state
+# Others
 .claude/
 .vercel
 .env*
