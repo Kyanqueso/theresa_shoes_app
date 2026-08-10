@@ -21,7 +21,6 @@ import { isDeviceRecognized, verifyPin } from '../lib/auth.js'
 
 const NUMBER_OPTIONS = [1, 2, 3, 4, 5]
 const POST_ORDER_COOLDOWN_MS = 30_000
-const THUMBNAIL_COUNT = 5
 
 function PillGroup({ label, options, value, onChange, onPreview }) {
   return (
@@ -231,7 +230,11 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
   const selectionBlocks = useMemo(() => {
     const list = []
     if (materialOption) {
-      list.push({ type: 'material', label: materialOption.name, value: materialOption.swatch_color ?? null })
+      list.push({
+        type: 'material',
+        label: materialOption.name,
+        value: materialOption.swatch_color ?? materialOption.image_url ?? null,
+      })
     }
     if (moldTypeOption && moldTypeOption.name.trim().toLowerCase() !== 'none') {
       list.push({ type: 'mold_type', label: moldTypeOption.name, value: moldTypeOption.image_url ?? null })
@@ -426,21 +429,16 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
 
         {images.length > 1 && (
           <div className="mt-4 flex gap-2">
-            {Array.from({ length: Math.max(THUMBNAIL_COUNT, images.length) }).map((_, index) => (
+            {images.map((image, index) => (
               <button
-                key={index}
+                key={image.id}
                 type="button"
                 onClick={() => setActiveImage(index)}
-                disabled={!images[index]}
-                className={`h-14 w-14 overflow-hidden rounded-lg border-2 disabled:cursor-default ${
+                className={`h-14 w-14 overflow-hidden rounded-lg border-2 ${
                   activeImage === index ? 'border-primary' : 'border-transparent'
                 }`}
               >
-                {images[index] ? (
-                  <img src={images[index].image_url} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <ImagePlaceholder className="h-full w-full" />
-                )}
+                <img src={image.image_url} alt="" className="h-full w-full object-cover" />
               </button>
             ))}
           </div>
