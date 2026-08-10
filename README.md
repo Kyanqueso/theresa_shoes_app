@@ -17,8 +17,12 @@ This is a showcase build, not the real production app:
   real owner).
 
 These are controlled by `DEMO_MODE=true` (backend) and `VITE_DEMO_MODE=true` (frontend) — see
-where `demo_mode` / `isDemoMode` are checked in the code. A real, fully-secured deployment
-(real PIN auth, real contact info) is future work, not published yet.
+where `demo_mode` / `isDemoMode` are checked in the code.
+
+The real (`master`) app is under ongoing modification as requested by the client — features
+and fixes land there as they're commissioned, and it isn't published yet. This demo isn't a
+stripped-down preview, though: feature-wise, it's effectively the whole thing as it stands
+today, just with the PIN check bypassed and the owner's real contact info hidden.
 
 ## Structure
 

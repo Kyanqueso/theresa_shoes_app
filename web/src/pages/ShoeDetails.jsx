@@ -167,7 +167,7 @@ function CompanyCombobox({ companies, value, onChange }) {
   )
 }
 
-function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
+function ShoeOrderPanel({ shoe, attributeOptions, companies, onAttributesChanged }) {
   const { tag } = useParams()
   const navigate = useNavigate()
   const [activeImage, setActiveImage] = useState(0)
@@ -186,6 +186,8 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
   const [isCheckingDevice, setIsCheckingDevice] = useState(false)
   const [manageTarget, setManageTarget] = useState(null)
   const [isPinOpen, setIsPinOpen] = useState(false)
+  const [isMaterialPickerOpen, setIsMaterialPickerOpen] = useState(false)
+  const [isBucklePickerOpen, setIsBucklePickerOpen] = useState(false)
   const [clientName, setClientName] = useState('')
   const [companyName, setCompanyName] = useState('')
   const [contactNumber, setContactNumber] = useState(CONTACT_PREFIX)
@@ -422,25 +424,27 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
           <ImagePlaceholder className="aspect-square w-full rounded-lg" />
         )}
 
-        <div className="mt-4 flex gap-2">
-          {Array.from({ length: Math.max(THUMBNAIL_COUNT, images.length) }).map((_, index) => (
-            <button
-              key={index}
-              type="button"
-              onClick={() => setActiveImage(index)}
-              disabled={!images[index]}
-              className={`h-14 w-14 overflow-hidden rounded-lg border-2 disabled:cursor-default ${
-                activeImage === index ? 'border-primary' : 'border-transparent'
-              }`}
-            >
-              {images[index] ? (
-                <img src={images[index].image_url} alt="" className="h-full w-full object-cover" />
-              ) : (
-                <ImagePlaceholder className="h-full w-full" />
-              )}
-            </button>
-          ))}
-        </div>
+        {images.length > 1 && (
+          <div className="mt-4 flex gap-2">
+            {Array.from({ length: Math.max(THUMBNAIL_COUNT, images.length) }).map((_, index) => (
+              <button
+                key={index}
+                type="button"
+                onClick={() => setActiveImage(index)}
+                disabled={!images[index]}
+                className={`h-14 w-14 overflow-hidden rounded-lg border-2 disabled:cursor-default ${
+                  activeImage === index ? 'border-primary' : 'border-transparent'
+                }`}
+              >
+                {images[index] ? (
+                  <img src={images[index].image_url} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <ImagePlaceholder className="h-full w-full" />
+                )}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="mt-4 rounded-lg border border-gray-300 border-l-4 border-l-primary bg-white p-4 text-sm text-gray-600">
           {shoe.description}
@@ -460,23 +464,46 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
               setMaterialGroup(id)
               setMaterialSwatch(null)
               setColorCode('')
+              setIsMaterialPickerOpen(true)
             }}
           />
 
           {materialGroupOption && (
-            <SwatchPicker
-              title={`${materialGroupOption.name} Leather Colors`}
-              instructionText="Tap an available color to select it and auto-fill the color input."
-              items={materialSwatches}
-              selectedId={materialSwatch}
-              onSelect={(swatch) => {
-                setMaterialSwatch(swatch.id)
-                setColorCode(swatch.name)
-              }}
-              onManageClick={() => handleManageClick('materials')}
-              manageLabel="Manage Swatches"
-            />
+            <button
+              type="button"
+              onClick={() => setIsMaterialPickerOpen(true)}
+              className="flex w-fit items-center gap-2 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-black"
+            >
+              {materialSwatchOption ? (
+                <span
+                  className="h-5 w-5 shrink-0 rounded"
+                  style={materialSwatchOption.swatch_color ? { backgroundColor: materialSwatchOption.swatch_color } : undefined}
+                >
+                  {materialSwatchOption.image_url && (
+                    <img src={materialSwatchOption.image_url} alt="" className="h-full w-full rounded object-cover" />
+                  )}
+                </span>
+              ) : null}
+              {materialSwatchOption ? `Color: ${materialSwatchOption.name}` : 'Choose Color'}
+            </button>
           )}
+
+          <SwatchPicker
+            isOpen={isMaterialPickerOpen}
+            onClose={() => setIsMaterialPickerOpen(false)}
+            title={`${materialGroupOption?.name ?? ''} Leather Colors`}
+            instructionText="Tap an available color to select it and auto-fill the color input. Drag a color between Available and Unavailable to change its stock status."
+            items={materialSwatches}
+            selectedId={materialSwatch}
+            onSelect={(swatch) => {
+              setMaterialSwatch(swatch.id)
+              setColorCode(swatch.name)
+              setIsMaterialPickerOpen(false)
+            }}
+            onChanged={onAttributesChanged}
+            onManageClick={() => handleManageClick('materials')}
+            manageLabel="Manage Swatches"
+          />
 
           <div>
             <label className="text-sm font-semibold text-black">Enter Color / Code</label>
@@ -517,6 +544,7 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
               onChange={(value) => {
                 setWithBuckle(value)
                 if (value === 'No') setBuckleVariant(null)
+                else setIsBucklePickerOpen(true)
               }}
             />
             <YesNoToggle
@@ -540,16 +568,37 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
           </div>
 
           {withBuckle === 'Yes' && (
-            <SwatchPicker
-              title="Buckle Variants"
-              instructionText="Tap an available buckle to select it."
-              items={attributeOptions.buckle ?? []}
-              selectedId={buckleVariant}
-              onSelect={(variant) => setBuckleVariant(variant.id)}
-              onManageClick={() => handleManageClick('buckles')}
-              manageLabel="Manage Buckles"
-            />
+            <button
+              type="button"
+              onClick={() => setIsBucklePickerOpen(true)}
+              className="flex w-fit items-center gap-2 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-black"
+            >
+              {buckleOption ? (
+                <span className="h-5 w-5 shrink-0 overflow-hidden rounded">
+                  {buckleOption.image_url && (
+                    <img src={buckleOption.image_url} alt="" className="h-full w-full object-cover" />
+                  )}
+                </span>
+              ) : null}
+              {buckleOption ? `Buckle: ${buckleOption.name}` : 'Choose Buckle'}
+            </button>
           )}
+
+          <SwatchPicker
+            isOpen={isBucklePickerOpen}
+            onClose={() => setIsBucklePickerOpen(false)}
+            title="Buckle Variants"
+            instructionText="Tap an available buckle to select it. Drag a buckle between Available and Unavailable to change its stock status."
+            items={attributeOptions.buckle ?? []}
+            selectedId={buckleVariant}
+            onSelect={(variant) => {
+              setBuckleVariant(variant.id)
+              setIsBucklePickerOpen(false)
+            }}
+            onChanged={onAttributesChanged}
+            onManageClick={() => handleManageClick('buckles')}
+            manageLabel="Manage Buckles"
+          />
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
@@ -650,6 +699,27 @@ export default function ShoeDetails() {
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
 
+  const groupAttributeOptions = (attributesData) =>
+    attributesData.reduce((acc, option) => {
+      // Out-of-stock material swatches and buckle variants still need to show (as
+      // disabled/"Unavailable") so guests can see what's coming back - only a fully
+      // hidden material group (no parent) or a hidden mold/heel/flatform/slingback
+      // option should disappear entirely.
+      const keepInactive = option.category === 'buckle' || (option.category === 'material' && option.parent_id)
+      if (!option.is_active && !keepInactive) return acc
+      acc[option.category] = acc[option.category] ?? []
+      acc[option.category].push(option)
+      return acc
+    }, {})
+
+  // Re-fetch just the attribute options (e.g. after a guest drags a swatch between
+  // Available/Unavailable) without disturbing shoes/companies state.
+  const refreshAttributeOptions = () => {
+    listAttributeOptions()
+      .then((attributesData) => setAttributeOptions(groupAttributeOptions(attributesData)))
+      .catch(() => {})
+  }
+
   useEffect(() => {
     let cancelled = false
     setIsLoading(true)
@@ -659,18 +729,7 @@ export default function ShoeDetails() {
       .then(([shoesData, attributesData, companiesData]) => {
         if (cancelled) return
         setShoes(shoesData)
-        const grouped = attributesData.reduce((acc, option) => {
-          // Out-of-stock material swatches and buckle variants still need to show (as
-          // disabled/"Unavailable") so guests can see what's coming back - only a fully
-          // hidden material group (no parent) or a hidden mold/heel/flatform/slingback
-          // option should disappear entirely.
-          const keepInactive = option.category === 'buckle' || (option.category === 'material' && option.parent_id)
-          if (!option.is_active && !keepInactive) return acc
-          acc[option.category] = acc[option.category] ?? []
-          acc[option.category].push(option)
-          return acc
-        }, {})
-        setAttributeOptions(grouped)
+        setAttributeOptions(groupAttributeOptions(attributesData))
         setCompanies(companiesData)
       })
       .catch(() => {
@@ -683,6 +742,7 @@ export default function ShoeDetails() {
     return () => {
       cancelled = true
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const sortedShoes = useMemo(
@@ -736,7 +796,13 @@ export default function ShoeDetails() {
       ) : !shoe ? (
         <p className="px-6 py-12 text-center text-gray-500">Shoe not found.</p>
       ) : (
-        <ShoeOrderPanel key={shoe.id} shoe={shoe} attributeOptions={attributeOptions} companies={companies} />
+        <ShoeOrderPanel
+          key={shoe.id}
+          shoe={shoe}
+          attributeOptions={attributeOptions}
+          companies={companies}
+          onAttributesChanged={refreshAttributeOptions}
+        />
       )}
     </div>
   )

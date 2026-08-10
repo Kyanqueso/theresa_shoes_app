@@ -5,7 +5,14 @@ import ConfirmButton from '../ConfirmButton.jsx'
 import LoadingSpinner from '../LoadingSpinner.jsx'
 import Modal from './Modal.jsx'
 import ColorDropzone from './ColorDropzone.jsx'
-import { createAttributeOption, deleteAttributeOption, listAttributeOptions, updateAttributeOption } from '../../lib/attributesApi.js'
+import ImageDropzone from './ImageDropzone.jsx'
+import {
+  createAttributeOption,
+  deleteAttributeOption,
+  listAttributeOptions,
+  updateAttributeOption,
+  uploadAttributeImage,
+} from '../../lib/attributesApi.js'
 import { sanitizeText } from '../../lib/textInput.js'
 
 function AddMaterialForm({ onCancel, onSave, saving, error }) {
@@ -45,11 +52,40 @@ function AddMaterialForm({ onCancel, onSave, saving, error }) {
 
 function AddSwatchForm({ onCancel, onSave, saving, error }) {
   const [name, setName] = useState('')
+  const [swatchType, setSwatchType] = useState('color')
   const [color, setColor] = useState('')
+  const [file, setFile] = useState(null)
+  const previewUrl = file ? URL.createObjectURL(file) : null
+
+  const isReady = swatchType === 'color' ? Boolean(color) : Boolean(file)
 
   return (
     <div className="flex flex-col gap-4 text-left">
-      <ColorDropzone label="Swatch Color" color={color} onChange={setColor} />
+      <div>
+        <p className="text-sm font-semibold text-black">Swatch Type</p>
+        <div className="mt-2 flex gap-2">
+          {['color', 'image'].map((type) => (
+            <button
+              key={type}
+              type="button"
+              onClick={() => setSwatchType(type)}
+              className={`rounded-lg border px-4 py-1.5 text-sm font-medium capitalize transition-colors ${
+                swatchType === type
+                  ? 'border-primary bg-primary text-white'
+                  : 'border-gray-300 text-gray-600 hover:text-black'
+              }`}
+            >
+              {type}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {swatchType === 'color' ? (
+        <ColorDropzone label="Swatch Color" color={color} onChange={setColor} />
+      ) : (
+        <ImageDropzone label="Swatch Image" previewUrl={previewUrl} onFileSelect={setFile} />
+      )}
 
       <div>
         <label className="text-sm font-semibold text-black">Swatch Name</label>
@@ -75,8 +111,8 @@ function AddSwatchForm({ onCancel, onSave, saving, error }) {
         </button>
         <button
           type="button"
-          disabled={!name.trim() || !color || saving}
-          onClick={() => onSave({ name: name.trim(), color })}
+          disabled={!name.trim() || !isReady || saving}
+          onClick={() => onSave({ name: name.trim(), color: swatchType === 'color' ? color : null, file: swatchType === 'image' ? file : null })}
           className="rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
         >
           {saving ? 'Saving…' : 'Add'}
@@ -102,9 +138,11 @@ function SwatchCard({ swatch, onDelete, onDragStart }) {
         triggerClassName="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-danger text-white"
       />
       <div
-        className="aspect-[3/4] w-full rounded-md border border-black/10"
-        style={{ backgroundColor: swatch.swatch_color ?? '#cccccc' }}
-      />
+        className="aspect-[3/4] w-full overflow-hidden rounded-md border border-black/10"
+        style={swatch.image_url ? undefined : { backgroundColor: swatch.swatch_color ?? '#cccccc' }}
+      >
+        {swatch.image_url && <img src={swatch.image_url} alt={swatch.name} className="h-full w-full object-cover" />}
+      </div>
       <p className="text-sm font-medium text-black">{swatch.name}</p>
       {outOfStock && <p className="-mt-1 text-xs font-semibold text-golden-brown">OUT OF STOCK</p>}
     </div>
@@ -120,11 +158,17 @@ function MaterialGroup({ group, swatches, onChanged, onError }) {
   const available = swatches.filter((s) => s.is_active)
   const unavailable = swatches.filter((s) => !s.is_active)
 
-  const handleAddSwatch = async ({ name, color }) => {
+  const handleAddSwatch = async ({ name, color, file }) => {
     setSaving(true)
     setFormError(null)
     try {
-      await createAttributeOption({ category: 'material', name, swatch_color: color, parent_id: group.id })
+      const swatch = await createAttributeOption({
+        category: 'material',
+        name,
+        swatch_color: color || null,
+        parent_id: group.id,
+      })
+      if (file) await uploadAttributeImage(swatch.id, file)
       setIsAddingSwatch(false)
       onChanged()
     } catch {
