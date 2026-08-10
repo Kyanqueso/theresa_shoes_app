@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import PinPad from '../components/PinPad.jsx'
 import ForgotPinOverlay from '../components/ForgotPinOverlay.jsx'
 import { isDeviceRecognized, verifyPin } from '../lib/auth.js'
+import { isDemoMode } from '../lib/demoMode.js'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -33,6 +34,11 @@ export default function Login() {
 
   return (
     <section className="flex flex-col items-center px-6 py-20 text-center">
+      {isDemoMode && (
+        <p className="mb-6 max-w-xs rounded-lg bg-golden-brown/10 px-4 py-3 text-sm font-semibold text-golden-brown">
+          Demo mode: enter any 4 digits — no real PIN needed.
+        </p>
+      )}
       <PinPad onSubmit={verifyPin} onSuccess={handleSuccess} />
 
       <button

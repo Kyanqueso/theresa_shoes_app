@@ -1,9 +1,10 @@
 import { MapPin, Phone, Mail } from 'lucide-react'
+import { isDemoMode } from '../lib/demoMode.js'
 
 const CONTACT_DETAILS = [
-  { icon: MapPin, text: 'Marikina City, Metro Manila' },
-  { icon: Phone, text: '0922-597-8596' },
-  { icon: Mail, text: 'fernandovergara1950@gmail.com' },
+  { icon: MapPin, text: 'Marikina City, Metro Manila', sensitive: false },
+  { icon: Phone, text: '0922-597-8596', sensitive: true },
+  { icon: Mail, text: 'fernandovergara1950@gmail.com', sensitive: true },
 ]
 
 export default function Footer() {
@@ -21,13 +22,18 @@ export default function Footer() {
         <div>
           <h2 className="font-serif-display text-2xl font-semibold">Get in touch</h2>
           <ul className="mt-4 flex flex-col gap-3">
-            {CONTACT_DETAILS.map(({ icon: Icon, text }) => (
+            {CONTACT_DETAILS.map(({ icon: Icon, text, sensitive }) => (
               <li key={text} className="flex items-center gap-3 text-sm text-white/70">
                 <Icon size={18} className="shrink-0 text-gold" />
-                <span>{text}</span>
+                <span className={sensitive && isDemoMode ? 'select-none blur-sm' : undefined}>{text}</span>
               </li>
             ))}
           </ul>
+          {isDemoMode && (
+            <p className="mt-3 text-xs italic text-white/40">
+              Contact details are hidden on this demo.
+            </p>
+          )}
         </div>
       </div>
 

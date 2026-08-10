@@ -1,8 +1,9 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import contactPage1 from '../../assets/images/contact-page1.jpg'
 import contactBg from '../../assets/images/contact-bg.jpg'
 import bdoLogo from '../../assets/images/bdo-logo-img.png'
 import gcashLogo from '../../assets/images/gcash-logo-img.png'
+import { isDemoMode } from '../../lib/demoMode.js'
 
 // Same number shown in the footer (0922-597-8596), in E.164 form for the Viber deep link.
 const VIBER_NUMBER = '+639225978596'
@@ -35,12 +36,19 @@ const STEPS = [
 
 export default function Contact() {
   const viberCleanupRef = useRef(null)
+  const [showDemoNotice, setShowDemoNotice] = useState(false)
 
   // If the user navigates away right after clicking, cancel any pending fallback/listener/
   // iframe so they don't fire on whatever page they've since moved to.
   useEffect(() => () => viberCleanupRef.current?.(), [])
 
   const openViberContact = () => {
+    if (isDemoMode) {
+      setShowDemoNotice(true)
+      setTimeout(() => setShowDemoNotice(false), 2500)
+      return
+    }
+
     viberCleanupRef.current?.()
 
     // window.open() itself steals focus and fires "blur" the instant the new tab appears —
@@ -114,6 +122,11 @@ export default function Contact() {
           >
             Contact Us in Viber
           </button>
+          {showDemoNotice && (
+            <p className="mt-3 text-sm font-semibold text-golden-brown">
+              Not available on this demo — works on the live site.
+            </p>
+          )}
 
           <div className="mt-10 flex items-center justify-center gap-4">
             <img src={bdoLogo} alt="BDO" className="h-7 w-auto" />
@@ -122,9 +135,12 @@ export default function Contact() {
           </div>
           <p className="mt-3 text-sm text-white/70">*We accept cash and installment</p>
 
-          <p className="mt-6 font-bold">Fernando F. Vergara</p>
-          <p className="text-white/90">+63 9225978596</p>
+          <p className={`mt-6 font-bold ${isDemoMode ? 'select-none blur-sm' : ''}`}>Fernando F. Vergara</p>
+          <p className={isDemoMode ? 'select-none blur-sm' : 'text-white/90'}>+63 9225978596</p>
           <p className="text-white/60">Based on Marikina City Metro Manila</p>
+          {isDemoMode && (
+            <p className="mt-2 text-xs italic text-white/40">Contact details are hidden on this demo.</p>
+          )}
         </div>
       </section>
     </>
