@@ -7,12 +7,7 @@ from sqlalchemy.orm import Session
 from app.config.auth import require_admin_session
 from app.db.base import get_db
 from app.db.models import AttributeCategory
-from app.schema.attribute import (
-    AttributeAvailabilityUpdate,
-    AttributeOptionCreate,
-    AttributeOptionOut,
-    AttributeOptionUpdate,
-)
+from app.schema.attribute import AttributeOptionCreate, AttributeOptionOut, AttributeOptionUpdate
 from app.services import attribute_service
 from app.services.image_service import ImageTooLargeError
 
@@ -49,17 +44,6 @@ def create_attribute_option(payload: AttributeOptionCreate, db: Session = Depend
 )
 def update_attribute_option(option_id: uuid.UUID, payload: AttributeOptionUpdate, db: Session = Depends(get_db)):
     option = attribute_service.update_attribute_option(db, option_id, payload)
-    if option is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attribute option not found")
-    return option
-
-
-# Intentionally public (no require_admin_session): the guest-facing swatch pickers let anyone
-# drag a swatch/variant between Available and Unavailable, by client request. Scoped to only
-# is_active so this can't be used to rename options or swap their image/color from the outside.
-@router.patch("/{option_id}/availability", response_model=AttributeOptionOut)
-def set_attribute_availability(option_id: uuid.UUID, payload: AttributeAvailabilityUpdate, db: Session = Depends(get_db)):
-    option = attribute_service.update_attribute_option(db, option_id, AttributeOptionUpdate(is_active=payload.is_active))
     if option is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attribute option not found")
     return option

@@ -26,10 +26,6 @@ class AttributeOptionUpdate(BaseModel):
     is_active: bool | None = None
 
 
-class AttributeAvailabilityUpdate(BaseModel):
-    is_active: bool
-
-
 class AttributeOptionOut(AttributeOptionBase):
     model_config = ConfigDict(from_attributes=True)
 

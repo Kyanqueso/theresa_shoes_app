@@ -1,14 +1,14 @@
 import { ShoppingBag, X } from 'lucide-react'
-import { setAttributeAvailability } from '../lib/attributesApi.js'
 
-function SwatchTile({ item, selected, disabled, onClick, onDragStart }) {
+function SwatchTile({ item, selected, disabled, onClick }) {
   return (
     <button
       type="button"
-      draggable
-      onDragStart={(event) => onDragStart(event, item.id)}
+      disabled={disabled}
       onClick={onClick}
-      className="flex cursor-grab flex-col items-center gap-2 rounded-lg p-2 text-left transition-opacity hover:opacity-80 active:cursor-grabbing"
+      className={`flex flex-col items-center gap-2 rounded-lg p-2 text-left transition-opacity ${
+        disabled ? 'cursor-not-allowed opacity-60' : 'hover:opacity-80'
+      }`}
     >
       <div
         className={`aspect-[3/4] w-full rounded-md border-2 ${
@@ -32,7 +32,6 @@ export default function SwatchPicker({
   items,
   selectedId,
   onSelect,
-  onChanged,
   onManageClick,
   manageLabel = 'Manage Swatches',
 }) {
@@ -40,25 +39,6 @@ export default function SwatchPicker({
 
   const available = items.filter((item) => item.is_active)
   const unavailable = items.filter((item) => !item.is_active)
-
-  const handleDragStart = (event, itemId) => {
-    event.dataTransfer.setData('text/plain', itemId)
-  }
-
-  // Public, unauthenticated toggle by design — anyone can drag a swatch/variant between
-  // Available and Unavailable here, per client request.
-  const handleDrop = async (event, targetActive) => {
-    event.preventDefault()
-    const itemId = event.dataTransfer.getData('text/plain')
-    const item = items.find((option) => option.id === itemId)
-    if (!item || item.is_active === targetActive) return
-    try {
-      await setAttributeAvailability(itemId, targetActive)
-      onChanged?.()
-    } catch {
-      // best-effort - if this fails the item just stays where it was
-    }
-  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" onClick={onClose}>
@@ -96,39 +76,26 @@ export default function SwatchPicker({
           <p className="text-sm font-semibold text-black">
             Available <span className="ml-1 font-normal text-gray-500">{available.length} In Stock</span>
           </p>
-          <div
-            onDragOver={(event) => event.preventDefault()}
-            onDrop={(event) => handleDrop(event, true)}
-            className="mt-2 grid min-h-24 grid-cols-3 gap-3 rounded-lg bg-white p-3 sm:grid-cols-4 md:grid-cols-5"
-          >
+          <div className="mt-2 grid min-h-24 grid-cols-3 gap-3 rounded-lg bg-white p-3 sm:grid-cols-4 md:grid-cols-5">
             {available.length === 0 && <p className="col-span-full py-4 text-center text-sm text-gray-400">None available yet.</p>}
             {available.map((item) => (
-              <SwatchTile
-                key={item.id}
-                item={item}
-                selected={selectedId === item.id}
-                onClick={() => onSelect(item)}
-                onDragStart={handleDragStart}
-              />
+              <SwatchTile key={item.id} item={item} selected={selectedId === item.id} onClick={() => onSelect(item)} />
             ))}
           </div>
         </div>
 
-        <div className="mt-4">
-          <p className="text-sm font-semibold text-black">
-            Unavailable <span className="ml-1 font-normal text-golden-brown">{unavailable.length} Unavailable</span>
-          </p>
-          <div
-            onDragOver={(event) => event.preventDefault()}
-            onDrop={(event) => handleDrop(event, false)}
-            className="mt-2 grid min-h-24 grid-cols-3 gap-3 rounded-lg bg-gray-100 p-3 sm:grid-cols-4 md:grid-cols-5"
-          >
-            {unavailable.length === 0 && <p className="col-span-full py-4 text-center text-sm text-gray-400">Nothing here.</p>}
-            {unavailable.map((item) => (
-              <SwatchTile key={item.id} item={item} disabled onDragStart={handleDragStart} />
-            ))}
+        {unavailable.length > 0 && (
+          <div className="mt-4">
+            <p className="text-sm font-semibold text-black">
+              Unavailable <span className="ml-1 font-normal text-golden-brown">{unavailable.length} Unavailable</span>
+            </p>
+            <div className="mt-2 grid min-h-24 grid-cols-3 gap-3 rounded-lg bg-gray-100 p-3 sm:grid-cols-4 md:grid-cols-5">
+              {unavailable.map((item) => (
+                <SwatchTile key={item.id} item={item} disabled />
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   )

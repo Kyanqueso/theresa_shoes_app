@@ -167,7 +167,7 @@ function CompanyCombobox({ companies, value, onChange }) {
   )
 }
 
-function ShoeOrderPanel({ shoe, attributeOptions, companies, onAttributesChanged }) {
+function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
   const { tag } = useParams()
   const navigate = useNavigate()
   const [activeImage, setActiveImage] = useState(0)
@@ -492,7 +492,7 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies, onAttributesChanged
             isOpen={isMaterialPickerOpen}
             onClose={() => setIsMaterialPickerOpen(false)}
             title={`${materialGroupOption?.name ?? ''} Leather Colors`}
-            instructionText="Tap an available color to select it and auto-fill the color input. Drag a color between Available and Unavailable to change its stock status."
+            instructionText="Tap an available color to select it and auto-fill the color input."
             items={materialSwatches}
             selectedId={materialSwatch}
             onSelect={(swatch) => {
@@ -500,7 +500,6 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies, onAttributesChanged
               setColorCode(swatch.name)
               setIsMaterialPickerOpen(false)
             }}
-            onChanged={onAttributesChanged}
             onManageClick={() => handleManageClick('materials')}
             manageLabel="Manage Swatches"
           />
@@ -588,14 +587,13 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies, onAttributesChanged
             isOpen={isBucklePickerOpen}
             onClose={() => setIsBucklePickerOpen(false)}
             title="Buckle Variants"
-            instructionText="Tap an available buckle to select it. Drag a buckle between Available and Unavailable to change its stock status."
+            instructionText="Tap an available buckle to select it."
             items={attributeOptions.buckle ?? []}
             selectedId={buckleVariant}
             onSelect={(variant) => {
               setBuckleVariant(variant.id)
               setIsBucklePickerOpen(false)
             }}
-            onChanged={onAttributesChanged}
             onManageClick={() => handleManageClick('buckles')}
             manageLabel="Manage Buckles"
           />
@@ -712,14 +710,6 @@ export default function ShoeDetails() {
       return acc
     }, {})
 
-  // Re-fetch just the attribute options (e.g. after a guest drags a swatch between
-  // Available/Unavailable) without disturbing shoes/companies state.
-  const refreshAttributeOptions = () => {
-    listAttributeOptions()
-      .then((attributesData) => setAttributeOptions(groupAttributeOptions(attributesData)))
-      .catch(() => {})
-  }
-
   useEffect(() => {
     let cancelled = false
     setIsLoading(true)
@@ -796,13 +786,7 @@ export default function ShoeDetails() {
       ) : !shoe ? (
         <p className="px-6 py-12 text-center text-gray-500">Shoe not found.</p>
       ) : (
-        <ShoeOrderPanel
-          key={shoe.id}
-          shoe={shoe}
-          attributeOptions={attributeOptions}
-          companies={companies}
-          onAttributesChanged={refreshAttributeOptions}
-        />
+        <ShoeOrderPanel key={shoe.id} shoe={shoe} attributeOptions={attributeOptions} companies={companies} />
       )}
     </div>
   )
