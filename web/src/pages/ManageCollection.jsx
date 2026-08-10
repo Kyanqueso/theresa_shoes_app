@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { ArrowRight, Footprints, Layers, Link as LinkIcon, Shapes, Triangle, Waves } from 'lucide-react'
 import ConfirmButton from '../components/ConfirmButton.jsx'
 import ShoeManager from '../components/manage/ShoeManager.jsx'
@@ -20,7 +20,9 @@ const TABS = [
 export default function ManageCollection() {
   const { tag } = useParams()
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState('shoes')
+  const location = useLocation()
+  const initialTab = TABS.some((tab) => tab.key === location.state?.initialTab) ? location.state.initialTab : 'shoes'
+  const [activeTab, setActiveTab] = useState(initialTab)
 
   return (
     <>

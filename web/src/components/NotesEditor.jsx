@@ -24,7 +24,11 @@ function PhotoBlock({ file, onRemove }) {
 
   return (
     <div className="relative inline-block">
-      <img src={previewUrl} alt="" className="h-24 w-24 rounded-lg border border-gray-200 object-cover" />
+      <img
+        src={previewUrl}
+        alt=""
+        className="h-36 w-36 rounded-lg border border-gray-200 object-cover sm:h-48 sm:w-48"
+      />
       <button
         type="button"
         onClick={onRemove}

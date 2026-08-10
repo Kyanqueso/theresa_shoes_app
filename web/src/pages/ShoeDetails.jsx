@@ -9,12 +9,15 @@ import ReviewOrderOverlay from '../components/ReviewOrderOverlay.jsx'
 import OrderSuccessOverlay from '../components/OrderSuccessOverlay.jsx'
 import NotesEditor from '../components/NotesEditor.jsx'
 import PhoneNumberInput, { CONTACT_LENGTH, CONTACT_PREFIX } from '../components/PhoneNumberInput.jsx'
+import SwatchPicker from '../components/SwatchPicker.jsx'
+import PinOverlay from '../components/PinOverlay.jsx'
 import { listShoes } from '../lib/shoesApi.js'
 import { listAttributeOptions } from '../lib/attributesApi.js'
 import { listCompanies } from '../lib/companiesApi.js'
 import { createOrder, uploadNotesImage } from '../lib/ordersApi.js'
 import { ApiError } from '../lib/apiClient.js'
 import { sanitizeText } from '../lib/textInput.js'
+import { isDeviceRecognized, verifyPin } from '../lib/auth.js'
 
 const NUMBER_OPTIONS = [1, 2, 3, 4, 5]
 const POST_ORDER_COOLDOWN_MS = 30_000
@@ -165,8 +168,11 @@ function CompanyCombobox({ companies, value, onChange }) {
 }
 
 function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
+  const { tag } = useParams()
+  const navigate = useNavigate()
   const [activeImage, setActiveImage] = useState(0)
-  const [material, setMaterial] = useState(null)
+  const [materialGroup, setMaterialGroup] = useState(null)
+  const [materialSwatch, setMaterialSwatch] = useState(null)
   const [colorCode, setColorCode] = useState('')
   const [moldType, setMoldType] = useState(null)
   const [heelType, setHeelType] = useState(null)
@@ -174,8 +180,12 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
   const [heelSize, setHeelSize] = useState(1)
   const [quantity, setQuantity] = useState(1)
   const [withBuckle, setWithBuckle] = useState('No')
+  const [buckleVariant, setBuckleVariant] = useState(null)
   const [withFlatform, setWithFlatform] = useState('No')
   const [withSlingback, setWithSlingback] = useState('No')
+  const [isCheckingDevice, setIsCheckingDevice] = useState(false)
+  const [manageTarget, setManageTarget] = useState(null)
+  const [isPinOpen, setIsPinOpen] = useState(false)
   const [clientName, setClientName] = useState('')
   const [companyName, setCompanyName] = useState('')
   const [contactNumber, setContactNumber] = useState(CONTACT_PREFIX)
@@ -206,9 +216,13 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
   }, [cooldownRemaining])
 
   const findOption = (category, id) => (attributeOptions[category] ?? []).find((option) => option.id === id) ?? null
-  const materialOption = findOption('material', material)
+  const materialGroupOption = findOption('material', materialGroup)
+  const materialSwatchOption = findOption('material', materialSwatch)
+  const materialOption = materialSwatchOption ?? materialGroupOption
+  const materialSwatches = (attributeOptions.material ?? []).filter((option) => option.parent_id === materialGroup)
   const moldTypeOption = findOption('mold_type', moldType)
   const heelTypeOption = findOption('heel_type', heelType)
+  const buckleOption = findOption('buckle', buckleVariant)
   const flatformOption = attributeOptions.flatform?.[0] ?? null
   const slingbackOption = attributeOptions.slingback?.[0] ?? null
 
@@ -224,7 +238,7 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
       list.push({ type: 'heel_type', label: heelTypeOption.name, value: heelTypeOption.image_url ?? null })
     }
     if (withBuckle === 'Yes') {
-      list.push({ type: 'buckle', label: 'Yes', value: null })
+      list.push({ type: 'buckle', label: buckleOption?.name ?? 'Yes', value: buckleOption?.image_url ?? null })
     }
     if (withFlatform === 'Yes') {
       list.push({ type: 'flatform', label: flatformOption?.name ?? 'Yes', value: flatformOption?.image_url ?? null })
@@ -233,7 +247,7 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
       list.push({ type: 'slingback', label: slingbackOption?.name ?? 'Yes', value: slingbackOption?.image_url ?? null })
     }
     return list
-  }, [materialOption, moldTypeOption, heelTypeOption, withBuckle, withFlatform, withSlingback, flatformOption, slingbackOption])
+  }, [materialOption, moldTypeOption, heelTypeOption, withBuckle, buckleOption, withFlatform, withSlingback, flatformOption, slingbackOption])
 
   // Uploads every photo/drawing block and returns the final ordered array to persist on the order.
   const buildNotesBlocks = async () => {
@@ -277,7 +291,7 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
   }
 
   const isFormComplete =
-    material !== null &&
+    materialGroup !== null &&
     colorCode.trim() !== '' &&
     moldType !== null &&
     heelType !== null &&
@@ -308,7 +322,7 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
         company_name: companyName.trim() || null,
         contact_number: contactNumber === CONTACT_PREFIX ? null : contactNumber,
         shoe_id: shoe.id,
-        material_id: material,
+        material_id: materialSwatch ?? materialGroup,
         mold_type_id: moldType,
         heel_type_id: heelType,
         color_code: colorCode.trim() || null,
@@ -316,6 +330,7 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
         heel_size: heelSize,
         quantity,
         with_buckle: withBuckle === 'Yes',
+        buckle_id: withBuckle === 'Yes' ? buckleVariant : null,
         with_flatform: withFlatform === 'Yes',
         with_slingback: withSlingback === 'Yes',
         unit_price: shoe.price,
@@ -376,6 +391,23 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
     window.open('https://www.messenger.com/', '_blank', 'noopener,noreferrer')
   }
 
+  const handleManageClick = async (target) => {
+    setIsCheckingDevice(true)
+    const ok = await isDeviceRecognized()
+    setIsCheckingDevice(false)
+    if (!ok) {
+      navigate('/403')
+      return
+    }
+    setManageTarget(target)
+    setIsPinOpen(true)
+  }
+
+  const handlePinSuccess = () => {
+    setIsPinOpen(false)
+    navigate(`/collection/${tag}/manage`, { state: { initialTab: manageTarget } })
+  }
+
   return (
     <div className="mx-auto grid max-w-5xl grid-cols-1 gap-8 px-6 py-8 lg:grid-cols-2">
       <div>
@@ -422,10 +454,29 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
         <div className="mt-5 flex flex-col gap-5">
           <PillGroup
             label="Select Material"
-            options={attributeOptions.material ?? []}
-            value={material}
-            onChange={setMaterial}
+            options={(attributeOptions.material ?? []).filter((option) => !option.parent_id)}
+            value={materialGroup}
+            onChange={(id) => {
+              setMaterialGroup(id)
+              setMaterialSwatch(null)
+              setColorCode('')
+            }}
           />
+
+          {materialGroupOption && (
+            <SwatchPicker
+              title={`${materialGroupOption.name} Leather Colors`}
+              instructionText="Tap an available color to select it and auto-fill the color input."
+              items={materialSwatches}
+              selectedId={materialSwatch}
+              onSelect={(swatch) => {
+                setMaterialSwatch(swatch.id)
+                setColorCode(swatch.name)
+              }}
+              onManageClick={() => handleManageClick('materials')}
+              manageLabel="Manage Swatches"
+            />
+          )}
 
           <div>
             <label className="text-sm font-semibold text-black">Enter Color / Code</label>
@@ -460,7 +511,14 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <YesNoToggle label="With Buckle?" value={withBuckle} onChange={setWithBuckle} />
+            <YesNoToggle
+              label="With Buckle?"
+              value={withBuckle}
+              onChange={(value) => {
+                setWithBuckle(value)
+                if (value === 'No') setBuckleVariant(null)
+              }}
+            />
             <YesNoToggle
               label="With Flatform?"
               value={withFlatform}
@@ -480,6 +538,18 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
               }}
             />
           </div>
+
+          {withBuckle === 'Yes' && (
+            <SwatchPicker
+              title="Buckle Variants"
+              instructionText="Tap an available buckle to select it."
+              items={attributeOptions.buckle ?? []}
+              selectedId={buckleVariant}
+              onSelect={(variant) => setBuckleVariant(variant.id)}
+              onManageClick={() => handleManageClick('buckles')}
+              manageLabel="Manage Buckles"
+            />
+          )}
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
@@ -525,6 +595,13 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
         images={images}
         initialIndex={activeImage}
         onClose={() => setIsLightboxOpen(false)}
+      />
+
+      <PinOverlay
+        isOpen={isPinOpen}
+        onClose={() => setIsPinOpen(false)}
+        onSubmit={verifyPin}
+        onSuccess={handlePinSuccess}
       />
 
       <ReviewOrderOverlay
@@ -583,7 +660,12 @@ export default function ShoeDetails() {
         if (cancelled) return
         setShoes(shoesData)
         const grouped = attributesData.reduce((acc, option) => {
-          if (!option.is_active) return acc
+          // Out-of-stock material swatches and buckle variants still need to show (as
+          // disabled/"Unavailable") so guests can see what's coming back - only a fully
+          // hidden material group (no parent) or a hidden mold/heel/flatform/slingback
+          // option should disappear entirely.
+          const keepInactive = option.category === 'buckle' || (option.category === 'material' && option.parent_id)
+          if (!option.is_active && !keepInactive) return acc
           acc[option.category] = acc[option.category] ?? []
           acc[option.category].push(option)
           return acc

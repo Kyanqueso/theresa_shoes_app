@@ -25,7 +25,7 @@ export default function NotesBlockList({ blocks }) {
               key={index}
               src={block.value}
               alt=""
-              className="h-24 w-24 rounded-lg border border-gray-200 object-cover"
+              className="h-36 w-36 rounded-lg border border-gray-200 object-cover sm:h-48 sm:w-48"
             />
           )
         }
