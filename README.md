@@ -1,7 +1,24 @@
-# Theresa Shoes App
+# Theresa Shoes App — Demo
 
 A custom-shoe ordering app: guests browse the collection and submit orders, admins manage
 companies, orders, payments, and the catalog.
+
+**This repo currently only has the `demo` branch published — a public showcase deploy.**
+
+## Live demo
+
+- **Site**: https://web-kappa-two-18.vercel.app
+- **Admin panel**: click "Admin" → enter any 4 digits as the PIN, no real PIN needed.
+
+This is a showcase build, not the real production app:
+- The PIN check is bypassed — any 4 digits log you into the admin panel.
+- Real owner contact info (name, phone, email) is blurred/hidden on the Contact page and footer.
+- The "Contact Us in Viber" button is disabled here (shows a note instead of messaging the
+  real owner).
+
+These are controlled by `DEMO_MODE=true` (backend) and `VITE_DEMO_MODE=true` (frontend) — see
+where `demo_mode` / `isDemoMode` are checked in the code. A real, fully-secured deployment
+(real PIN auth, real contact info) is future work, not published yet.
 
 ## Structure
 
@@ -24,15 +41,7 @@ npm install
 npm run dev
 ```
 
-Both need a `.env` file (see `api/.env`'s existing keys / `web/.env.example`) — not committed,
-ask for the values.
-
-## Branches
-
-- `master` — the real app, real auth (PIN + device gate).
-- `demo` — public showcase deploy. `DEMO_MODE=true` (backend) / `VITE_DEMO_MODE=true` (frontend)
-  bypass the PIN check and hide/disable real contact info — see inline comments where
-  `demo_mode` / `isDemoMode` are checked.
+Both need a `.env` file (see `api/.env`'s existing keys) — not committed, ask for the values.
 
 ## Deploying
 
