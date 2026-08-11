@@ -1,7 +1,17 @@
 import { Check, MessageCircle, Phone, X } from 'lucide-react'
 
-export default function OrderSuccessOverlay({ isOpen, onClose, companyName, onMessengerShare }) {
+export default function OrderSuccessOverlay({
+  isOpen,
+  onClose,
+  companyName,
+  clientName,
+  onViberShare,
+  onOwnerViberChat,
+  onMessengerShare,
+}) {
   if (!isOpen) return null
+
+  const firstName = clientName?.trim().split(/\s+/)[0] || 'Your'
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" onClick={onClose}>
@@ -35,13 +45,15 @@ export default function OrderSuccessOverlay({ isOpen, onClose, companyName, onMe
         <div className="mt-4 grid grid-cols-3 gap-2">
           <button
             type="button"
+            onClick={onViberShare}
             className="flex flex-col items-center gap-1 rounded-lg bg-[#7C6FE0] px-2 py-2.5 text-xs font-semibold text-white transition-opacity hover:opacity-90"
           >
             <Phone size={16} />
-            Andrea&apos;s Viber
+            {firstName}&apos;s Viber
           </button>
           <button
             type="button"
+            onClick={onOwnerViberChat}
             className="flex flex-col items-center gap-1 rounded-lg bg-primary px-2 py-2.5 text-xs font-semibold text-white transition-opacity hover:opacity-90"
           >
             <Phone size={16} />

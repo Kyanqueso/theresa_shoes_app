@@ -11,6 +11,7 @@ import NotesEditor from '../components/NotesEditor.jsx'
 import PhoneNumberInput, { CONTACT_LENGTH, CONTACT_PREFIX } from '../components/PhoneNumberInput.jsx'
 import SwatchPicker from '../components/SwatchPicker.jsx'
 import PinOverlay from '../components/PinOverlay.jsx'
+import CloseMatchCompanyOverlay from '../components/CloseMatchCompanyOverlay.jsx'
 import { listShoes } from '../lib/shoesApi.js'
 import { listAttributeOptions } from '../lib/attributesApi.js'
 import { listCompanies } from '../lib/companiesApi.js'
@@ -18,6 +19,8 @@ import { createOrder, uploadNotesImage } from '../lib/ordersApi.js'
 import { ApiError } from '../lib/apiClient.js'
 import { sanitizeText } from '../lib/textInput.js'
 import { isDeviceRecognized, verifyPin } from '../lib/auth.js'
+import { OWNER_VIBER_NUMBER } from '../lib/businessContact.js'
+import { findCloseMatchingCompany } from '../lib/companySimilarity.js'
 
 const NUMBER_OPTIONS = [1, 2, 3, 4, 5]
 const POST_ORDER_COOLDOWN_MS = 30_000
@@ -187,6 +190,7 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
   const [isPinOpen, setIsPinOpen] = useState(false)
   const [isMaterialPickerOpen, setIsMaterialPickerOpen] = useState(false)
   const [isBucklePickerOpen, setIsBucklePickerOpen] = useState(false)
+  const [closeMatchCompany, setCloseMatchCompany] = useState(null)
   const [clientName, setClientName] = useState('')
   const [companyName, setCompanyName] = useState('')
   const [contactNumber, setContactNumber] = useState(CONTACT_PREFIX)
@@ -317,7 +321,7 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
     setIsReviewOpen(true)
   }
 
-  const handleConfirmOrder = async () => {
+  const submitOrder = async () => {
     setSubmitError(null)
     setIsSubmitting(true)
     try {
@@ -350,6 +354,27 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  const handleConfirmOrder = () => {
+    const trimmedName = companyName.trim()
+    if (trimmedName) {
+      const exactMatch = companies.some((company) => company.name.trim().toLowerCase() === trimmedName.toLowerCase())
+      if (!exactMatch) {
+        const closeMatch = findCloseMatchingCompany(trimmedName, companies)
+        if (closeMatch) {
+          setIsReviewOpen(false)
+          setCloseMatchCompany(closeMatch)
+          return
+        }
+      }
+    }
+    submitOrder()
+  }
+
+  const handleConfirmCloseMatch = () => {
+    setCloseMatchCompany(null)
+    submitOrder()
   }
 
   const buildOrderSummaryText = () => {
@@ -394,6 +419,26 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
       // clipboard access can fail (e.g. insecure context) — opening Messenger below still helps
     }
     window.open('https://www.messenger.com/', '_blank', 'noopener,noreferrer')
+  }
+
+  const handleViberShare = async () => {
+    const summary = buildOrderSummaryText()
+    try {
+      await navigator.clipboard.writeText(summary)
+    } catch {
+      // clipboard access can fail (e.g. insecure context) - the forward dialog still opens
+    }
+    window.open(`viber://forward?text=${encodeURIComponent(summary)}`, '_blank', 'noopener,noreferrer')
+  }
+
+  const handleOwnerViberChat = async () => {
+    const summary = buildOrderSummaryText()
+    try {
+      await navigator.clipboard.writeText(summary)
+    } catch {
+      // clipboard access can fail (e.g. insecure context) - the chat still opens, just unpasted
+    }
+    window.open(`viber://chat?number=${encodeURIComponent(OWNER_VIBER_NUMBER)}`, '_blank', 'noopener,noreferrer')
   }
 
   const handleManageClick = async (target) => {
@@ -649,6 +694,14 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
         onSuccess={handlePinSuccess}
       />
 
+      <CloseMatchCompanyOverlay
+        isOpen={Boolean(closeMatchCompany)}
+        newName={companyName.trim()}
+        existingName={closeMatchCompany?.name}
+        onConfirm={handleConfirmCloseMatch}
+        onCancel={() => setCloseMatchCompany(null)}
+      />
+
       <ReviewOrderOverlay
         isOpen={isReviewOpen}
         onClose={() => setIsReviewOpen(false)}
@@ -680,6 +733,9 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
         isOpen={isSuccessOpen}
         onClose={() => setIsSuccessOpen(false)}
         companyName={companyName.trim()}
+        clientName={clientName}
+        onViberShare={handleViberShare}
+        onOwnerViberChat={handleOwnerViberChat}
         onMessengerShare={handleMessengerShare}
       />
     </div>

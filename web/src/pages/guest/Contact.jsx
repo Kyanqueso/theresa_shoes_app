@@ -4,9 +4,8 @@ import contactBg from '../../assets/images/contact-bg.jpg'
 import bdoLogo from '../../assets/images/bdo-logo-img.png'
 import gcashLogo from '../../assets/images/gcash-logo-img.png'
 import { isDemoMode } from '../../lib/demoMode.js'
+import { OWNER_VIBER_NUMBER } from '../../lib/businessContact.js'
 
-// Same number shown in the footer (0922-597-8596), in E.164 form for the Viber deep link.
-const VIBER_NUMBER = '+639225978596'
 const VIBER_INSTALL_URL = 'https://www.viber.com/en/download/'
 
 const STEPS = [
@@ -64,7 +63,7 @@ export default function Contact() {
 
     const iframe = document.createElement('iframe')
     iframe.style.display = 'none'
-    iframe.src = `viber://chat?number=${encodeURIComponent(VIBER_NUMBER)}`
+    iframe.src = `viber://chat?number=${encodeURIComponent(OWNER_VIBER_NUMBER)}`
     document.body.appendChild(iframe)
     const removeIframeTimer = setTimeout(() => iframe.remove(), 2000)
 
