@@ -16,6 +16,7 @@ import { listShoes } from '../../lib/shoesApi.js'
 import { listAttributeOptions } from '../../lib/attributesApi.js'
 import { sanitizeText } from '../../lib/textInput.js'
 import { errorDetail } from '../../lib/apiClient.js'
+import { buildOrderSummary, notesTextFromBlocks } from '../../lib/orderSummary.js'
 
 function formatDate(value) {
   if (!value) return '—'
@@ -26,25 +27,28 @@ function shortId(id) {
   return `#${id.slice(0, 8)}`
 }
 
-function buildOrderSummary(order, { companyName, shoeName, materialName, moldName, heelName }) {
-  const lines = [
-    `${shoeName} - ₱${Number(order.unit_price).toLocaleString()} each`,
-    `Client: ${order.client_name}`,
-    companyName && `Company: ${companyName}`,
-    order.contact_number && `Contact #: ${order.contact_number}`,
-    materialName && `Material: ${materialName}`,
-    order.color_code && `Color/Code: ${order.color_code}`,
-    moldName && `Mold Type: ${moldName}`,
-    heelName && `Heel Type: ${heelName}`,
-    `Buckle: ${order.with_buckle ? 'Yes' : 'No'}`,
-    `Flatform: ${order.with_flatform ? 'Yes' : 'No'}`,
-    `Slingback: ${order.with_slingback ? 'Yes' : 'No'}`,
-    order.size && `Size: ${order.size}`,
-    order.heel_size && `Heel Size: ${order.heel_size}`,
-    `Quantity: ${order.quantity}`,
-    `Total: ₱${(order.unit_price * order.quantity).toLocaleString()}`,
-  ].filter(Boolean)
-  return lines.join('\n')
+/** Maps a saved order row onto the shared summary shape. */
+function summaryForOrder(order, { companyName, shoeName, materialName, moldName, heelName }) {
+  return buildOrderSummary({
+    modelName: shoeName,
+    unitPrice: order.unit_price,
+    quantity: order.quantity,
+    clientName: order.client_name,
+    companyName,
+    contactNumber: order.contact_number,
+    materialName,
+    colorCode: order.color_code,
+    moldTypeName: moldName,
+    heelTypeName: heelName,
+    withBuckle: order.with_buckle,
+    withFlatform: order.with_flatform,
+    withSlingback: order.with_slingback,
+    size: order.size,
+    heelSize: order.heel_size,
+    // The guest's typed notes travel with the order, so the admin's copy carries them too —
+    // previously they were dropped here and only the guest's own share included them.
+    notes: notesTextFromBlocks(order.notes_blocks),
+  })
 }
 
 /** Shared table for both the Orders page (current/archived tabs) and Complete Orders (fixed, no tabs). */
@@ -145,6 +149,8 @@ export default function OrderListPage({ companyId, mode }) {
     (order.shoe_id ? shoes.find((shoe) => shoe.id === order.shoe_id)?.name : order.custom_model_name) ?? '—'
   const optionName = (category, id) =>
     (attributeOptions[category] ?? []).find((option) => option.id === id)?.name ?? '—'
+  /** Turns the table's "—" placeholder back into nothing, for contexts that aren't a table. */
+  const named = (value) => (value === '—' ? null : value)
 
   // Postgres already filtered, searched, sorted and sliced — these rows are the page.
   const pageItems = orders
@@ -525,12 +531,14 @@ export default function OrderListPage({ companyId, mode }) {
         contactNumber={shareOrder?.contact_number}
         summaryText={
           shareOrder
-            ? buildOrderSummary(shareOrder, {
+            ? summaryForOrder(shareOrder, {
                 companyName,
                 shoeName: modelName(shareOrder),
-                materialName: optionName('material', shareOrder.material_id),
-                moldName: optionName('mold_type', shareOrder.mold_type_id),
-                heelName: optionName('heel_type', shareOrder.heel_type_id),
+                // optionName() renders an em dash for "not set", which is fine in a table
+                // cell but would read as a real value in pasted text — drop those instead.
+                materialName: named(optionName('material', shareOrder.material_id)),
+                moldName: named(optionName('mold_type', shareOrder.mold_type_id)),
+                heelName: named(optionName('heel_type', shareOrder.heel_type_id)),
               })
             : ''
         }

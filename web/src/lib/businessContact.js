@@ -30,3 +30,18 @@ export function toViberDigits(localNumber) {
 
 /** Deep link that opens a chat with an arbitrary number. */
 export const viberChatUrl = (digits) => `viber://chat?number=${digits}`
+
+/** Hands off to Viber for a given number.
+ *
+ * Plain navigation, deliberately — not window.open and not a hidden iframe. Both of those
+ * create something the browser can tear down: a hidden iframe removed on a timer cancels the
+ * OS handoff if Viber is still cold-starting, which is why the first tap used to bounce
+ * straight back to the site and only the second (with Viber now warm) worked. Assigning
+ * location.href from a click hands the URL to the OS and leaves nothing to cancel.
+ *
+ * If no handler is registered the browser simply stays put, so callers that want to react to
+ * that should watch for the page being hidden rather than expecting this to throw.
+ */
+export function openViberChat(digits) {
+  window.location.href = viberChatUrl(digits)
+}

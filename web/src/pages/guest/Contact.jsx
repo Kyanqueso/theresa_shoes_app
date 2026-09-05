@@ -4,7 +4,7 @@ import contactBg from '../../assets/images/contact-bg.jpg'
 import bdoLogo from '../../assets/images/bdo-logo-img.png'
 import gcashLogo from '../../assets/images/gcash-logo-img.png'
 import { isDemoMode } from '../../lib/demoMode.js'
-import { ownerViberChatUrl } from '../../lib/businessContact.js'
+import { OWNER_VIBER_DIGITS, openViberChat } from '../../lib/businessContact.js'
 
 const VIBER_INSTALL_URL = 'https://www.viber.com/en/download/'
 
@@ -36,9 +36,10 @@ const STEPS = [
 export default function Contact() {
   const viberCleanupRef = useRef(null)
   const [showDemoNotice, setShowDemoNotice] = useState(false)
+  const [showInstallNotice, setShowInstallNotice] = useState(false)
 
-  // If the user navigates away right after clicking, cancel any pending fallback/listener/
-  // iframe so they don't fire on whatever page they've since moved to.
+  // If the user leaves right after tapping, drop the pending timer and listeners so the
+  // "not installed" notice can't appear on whatever page they've moved to.
   useEffect(() => () => viberCleanupRef.current?.(), [])
 
   const openViberContact = () => {
@@ -49,30 +50,30 @@ export default function Contact() {
     }
 
     viberCleanupRef.current?.()
+    setShowInstallNotice(false)
 
-    // window.open() itself steals focus and fires "blur" the instant the new tab appears —
-    // even when the viber:// scheme has no handler — so that can't be used to detect success.
-    // Trigger the deep link invisibly via a hidden iframe instead: if Viber is installed, the OS
-    // hands off to it and blur fires for the real reason; if not, nothing happens and the
-    // fallback timer opens the install page (in its own tab, leaving this page untouched).
-    const fallbackTimer = setTimeout(() => {
-      window.open(VIBER_INSTALL_URL, '_blank', 'noopener,noreferrer')
-    }, 1500)
-    const onBlur = () => clearTimeout(fallbackTimer)
-    window.addEventListener('blur', onBlur, { once: true })
+    // Whether the handoff worked is judged by the page going away: if the OS switches to
+    // Viber this tab is hidden or unloaded. Still visible after the grace period means
+    // nothing handled the link, so Viber almost certainly isn't installed.
+    //
+    // The grace period is generous because a cold app start is slow — the previous version
+    // gave up after 1.5s and tore down the link mid-handoff, which is what made the first
+    // tap bounce back to the site and only the second one work.
+    const timer = setTimeout(() => setShowInstallNotice(true), 4000)
+    const cancel = () => clearTimeout(timer)
 
-    const iframe = document.createElement('iframe')
-    iframe.style.display = 'none'
-    iframe.src = ownerViberChatUrl()
-    document.body.appendChild(iframe)
-    const removeIframeTimer = setTimeout(() => iframe.remove(), 2000)
+    document.addEventListener('visibilitychange', cancel, { once: true })
+    window.addEventListener('pagehide', cancel, { once: true })
+    window.addEventListener('blur', cancel, { once: true })
 
     viberCleanupRef.current = () => {
-      clearTimeout(fallbackTimer)
-      clearTimeout(removeIframeTimer)
-      window.removeEventListener('blur', onBlur)
-      iframe.remove()
+      clearTimeout(timer)
+      document.removeEventListener('visibilitychange', cancel)
+      window.removeEventListener('pagehide', cancel)
+      window.removeEventListener('blur', cancel)
     }
+
+    openViberChat(OWNER_VIBER_DIGITS)
   }
 
   return (
@@ -124,6 +125,19 @@ export default function Contact() {
           {showDemoNotice && (
             <p className="mt-3 text-sm font-semibold text-golden-brown">
               Not available on this demo — works on the live site.
+            </p>
+          )}
+          {showInstallNotice && (
+            <p className="mt-3 text-sm font-semibold text-golden-brown">
+              Viber doesn&apos;t seem to be installed.{' '}
+              <a
+                href={VIBER_INSTALL_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-4"
+              >
+                Get Viber
+              </a>
             </p>
           )}
 

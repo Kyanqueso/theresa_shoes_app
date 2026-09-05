@@ -19,8 +19,9 @@ import { createOrder, uploadNotesImage } from '../lib/ordersApi.js'
 import { ApiError } from '../lib/apiClient.js'
 import { sanitizeText } from '../lib/textInput.js'
 import { isDeviceRecognized, verifyPin } from '../lib/auth.js'
-import { ownerViberChatUrl, toViberDigits, viberChatUrl } from '../lib/businessContact.js'
+import { OWNER_VIBER_DIGITS, openViberChat, toViberDigits } from '../lib/businessContact.js'
 import { findCloseMatchingCompany } from '../lib/companySimilarity.js'
+import { buildOrderSummary } from '../lib/orderSummary.js'
 
 // Heel sizes offered in the dropdown.
 const HEEL_SIZE_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -389,31 +390,30 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
     submitOrder()
   }
 
-  const buildOrderSummaryText = () => {
-    const noteText = notes.blocks
-      .filter((block) => block.type === 'text' && block.text?.trim())
-      .map((block) => block.text.trim())
-      .join(' / ')
-    const lines = [
-      `${shoe.name} - ₱${shoe.price.toLocaleString()} each`,
-      materialOption && `Material: ${materialOption.name}`,
-      colorCode && `Color/Code: ${colorCode}`,
-      moldTypeOption && `Mold Type: ${moldTypeOption.name}`,
-      heelTypeOption && `Heel Type: ${heelTypeOption.name}`,
-      `Buckle: ${withBuckle}`,
-      `Flatform: ${withFlatform}`,
-      `Slingback: ${withSlingback}`,
-      `Size: ${sizeValue}`,
-      `Heel Size: ${heelSize}`,
-      `Quantity: ${quantityValue}`,
-      noteText && `Notes: ${noteText}`,
-      `Name: ${clientName}`,
-      companyName && `Company: ${companyName}`,
-      contactNumber !== CONTACT_PREFIX && `Contact #: ${contactNumber}`,
-      `Total: ₱${(shoe.price * quantityValue).toLocaleString()}`,
-    ].filter(Boolean)
-    return lines.join('\n')
-  }
+  const buildOrderSummaryText = () =>
+    buildOrderSummary({
+      modelName: shoe.name,
+      unitPrice: shoe.price,
+      quantity: quantityValue,
+      clientName,
+      companyName: companyName.trim(),
+      // The field starts pre-filled with the "09" prefix; that alone isn't a number.
+      contactNumber: contactNumber === CONTACT_PREFIX ? null : contactNumber,
+      materialName: materialOption?.name,
+      colorCode,
+      moldTypeName: moldTypeOption?.name,
+      heelTypeName: heelTypeOption?.name,
+      withBuckle: withBuckle === 'Yes',
+      withFlatform: withFlatform === 'Yes',
+      withSlingback: withSlingback === 'Yes',
+      size: sizeValue,
+      heelSize,
+      // Straight from the editor's own blocks — these aren't saved yet at this point.
+      notes: notes.blocks
+        .filter((block) => block.type === 'text' && block.text?.trim())
+        .map((block) => block.text.trim())
+        .join(' / '),
+    })
 
   const handleMessengerShare = async () => {
     const summary = buildOrderSummaryText()
@@ -446,8 +446,12 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
       // Clipboard access can fail (insecure context) — the chat still opens, just unpasted.
     }
     const digits = toViberDigits(contactNumber)
-    const url = digits ? viberChatUrl(digits) : `viber://forward?text=${encodeURIComponent(summary)}`
-    window.open(url, '_blank', 'noopener,noreferrer')
+    if (digits) {
+      openViberChat(digits)
+    } else {
+      // No number on the order — the recipient picker is the only option left.
+      window.open(`viber://forward?text=${encodeURIComponent(summary)}`, '_blank', 'noopener,noreferrer')
+    }
   }
 
   const handleOwnerViberChat = async () => {
@@ -457,7 +461,7 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
     } catch {
       // clipboard access can fail (e.g. insecure context) - the chat still opens, just unpasted
     }
-    window.open(ownerViberChatUrl(), '_blank', 'noopener,noreferrer')
+    openViberChat(OWNER_VIBER_DIGITS)
   }
 
   const handleManageClick = async (target) => {
