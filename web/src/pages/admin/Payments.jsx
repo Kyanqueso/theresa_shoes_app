@@ -5,6 +5,7 @@ import ListToolbar from '../../components/ListToolbar.jsx'
 import DataTable from '../../components/DataTable.jsx'
 import Pagination from '../../components/Pagination.jsx'
 import LoadingSpinner from '../../components/LoadingSpinner.jsx'
+import ErrorBanner from '../../components/ErrorBanner.jsx'
 import { listCompanies } from '../../lib/companiesApi.js'
 import { listOrders } from '../../lib/ordersApi.js'
 import { listPayments, updatePayment } from '../../lib/paymentsApi.js'
@@ -14,6 +15,25 @@ import { errorDetail } from '../../lib/apiClient.js'
 function formatDate(value) {
   if (!value) return '—'
   return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+/** Short form for the date stamped under each installment — the full format would push an
+ * already-wide table wider still. */
+function formatShortDate(value) {
+  if (!value) return null
+  return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+/** An installment amount with the day it was received underneath. The date is set by the
+ * server the moment an amount is entered, so it always matches the figure above it. */
+function PaidCell({ amount, date }) {
+  const shown = formatShortDate(date)
+  return (
+    <div className="leading-tight">
+      <span>{amount}</span>
+      {shown && <span className="block text-[10px] font-medium text-gray-500">{shown}</span>}
+    </div>
+  )
 }
 
 function formatAmount(value) {
@@ -35,7 +55,9 @@ export default function Payments() {
   const [payments, setPayments] = useState([])
   const [orders, setOrders] = useState([])
   const [isLoading, setIsLoading] = useState(true)
+  // See OrderListPage: fetch failures replace the table, action failures sit above it.
   const [loadError, setLoadError] = useState(null)
+  const [actionError, setActionError] = useState(null)
   const [activeTab, setActiveTab] = useState('active')
   const [sort, setSort] = useState('newest')
   const [search, setSearch] = useState('')
@@ -138,6 +160,7 @@ export default function Payments() {
       setDrafts({})
       return
     }
+    setActionError(null)
     setIsSavingEdits(true)
     try {
       await Promise.all(
@@ -154,7 +177,7 @@ export default function Payments() {
       setDrafts({})
       refresh()
     } catch (err) {
-      setLoadError(errorDetail(err, 'Could not save some changes. Please try again.'))
+      setActionError(errorDetail(err, 'Could not save some changes. Please try again.'))
     } finally {
       setIsSavingEdits(false)
     }
@@ -191,9 +214,15 @@ export default function Payments() {
       totalAmount: Number(payment.total_amount).toLocaleString(),
       orderDate: formatDate(orderDate(payment.order_id)),
       dateDelivered: isEditing ? dateField(payment) : formatDate(payment.date_delivered),
-      firstPayment: isEditing ? payField(payment, 'first_payment') : formatAmount(payment.first_payment),
-      secondPayment: isEditing ? payField(payment, 'second_payment') : formatAmount(payment.second_payment),
-      thirdPayment: isEditing ? payField(payment, 'third_payment') : formatAmount(payment.third_payment),
+      firstPayment: isEditing
+        ? payField(payment, 'first_payment')
+        : <PaidCell amount={formatAmount(payment.first_payment)} date={payment.first_payment_date} />,
+      secondPayment: isEditing
+        ? payField(payment, 'second_payment')
+        : <PaidCell amount={formatAmount(payment.second_payment)} date={payment.second_payment_date} />,
+      thirdPayment: isEditing
+        ? payField(payment, 'third_payment')
+        : <PaidCell amount={formatAmount(payment.third_payment)} date={payment.third_payment_date} />,
       balance: formatAmount(payment.balance),
       balanceCleared: formatDate(payment.balance_cleared_date),
       ...(isArchiveTab ? { archivedDate: formatDate(orderFor(payment.order_id)?.archived_at) } : {}),
@@ -243,6 +272,8 @@ export default function Payments() {
           </div>
         ))}
       </div>
+
+      <ErrorBanner message={actionError} onDismiss={() => setActionError(null)} />
 
       <div className="mt-4">
         {isLoading ? (

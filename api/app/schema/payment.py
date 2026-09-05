@@ -37,6 +37,10 @@ class PaymentOut(PaymentBase):
     client_name: str | None = None
     balance: float
     balance_cleared_date: date | None = None
+    # Server-managed — derived from the amounts, never accepted from the client.
+    first_payment_date: date | None = None
+    second_payment_date: date | None = None
+    third_payment_date: date | None = None
 
 
 PaymentPage.model_rebuild()

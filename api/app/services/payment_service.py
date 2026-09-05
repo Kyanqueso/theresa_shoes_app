@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime, timezone
+from decimal import ROUND_HALF_UP, Decimal
 
 from fastapi import HTTPException, status
 from sqlalchemy import func
@@ -10,11 +11,47 @@ from app.db.models import Order, OrderStatus, Payment
 from app.schema.payment import PaymentCreate, PaymentUpdate
 
 
+CENTS = Decimal("0.01")
+
+# The three installments, paired with the column recording when each was received.
+INSTALLMENTS = (
+    ("first_payment", "first_payment_date", "1st"),
+    ("second_payment", "second_payment_date", "2nd"),
+    ("third_payment", "third_payment_date", "3rd"),
+)
+
+
+def _money(value) -> Decimal:
+    """Money as exact cents.
+
+    Amounts arrive from Pydantic as floats and come back from Postgres as Decimal. Mixing the
+    two and subtracting in binary floating point is what lets a fully-settled balance land on
+    0.009999999999 instead of 0 — near enough to look right in the table, but enough to keep
+    an order out of "paid" forever. Everything is converted through str() (never float()) so
+    no binary rounding error is inherited, then quantized to two places.
+    """
+    return Decimal(str(value or 0)).quantize(CENTS, rounding=ROUND_HALF_UP)
+
+
+def _paid_total(payment: Payment) -> Decimal:
+    return sum((_money(getattr(payment, field)) for field, _, _ in INSTALLMENTS), Decimal("0.00"))
+
+
+def _sync_payment_dates(payment: Payment) -> None:
+    """Stamps each installment with the day it was received, and clears the stamp if the
+    amount is zeroed again — so a date is never left sitting next to a blank amount."""
+    for amount_field, date_field, _ in INSTALLMENTS:
+        amount = _money(getattr(payment, amount_field))
+        if amount > 0:
+            if getattr(payment, date_field) is None:
+                setattr(payment, date_field, business_today())
+        else:
+            setattr(payment, date_field, None)
+
+
 def _recompute_balance(payment: Payment) -> None:
-    """Values coming from the DB are Decimal; values just set from a Pydantic float field
-    are plain float. Normalize both to float before doing arithmetic on them."""
-    paid = float(payment.first_payment or 0) + float(payment.second_payment or 0) + float(payment.third_payment or 0)
-    payment.balance = float(payment.total_amount) - paid
+    """balance is always exactly total - paid, to the cent."""
+    payment.balance = _money(payment.total_amount) - _paid_total(payment)
     if payment.balance <= 0:
         if payment.balance_cleared_date is None:
             payment.balance_cleared_date = business_today()
@@ -27,9 +64,8 @@ def _recompute_balance(payment: Payment) -> None:
 def _validate_payment_amounts(payment: Payment) -> None:
     """Enforces: no negative installments, each installment can only be filled in once the one
     before it is, and the total paid can never exceed what's owed on the order."""
-    first = float(payment.first_payment or 0)
-    second = float(payment.second_payment or 0)
-    third = float(payment.third_payment or 0)
+    first, second, third = (_money(getattr(payment, field)) for field, _, _ in INSTALLMENTS)
+    total = _money(payment.total_amount)
 
     if first < 0 or second < 0 or third < 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Payment amounts can't be negative.")
@@ -41,9 +77,12 @@ def _validate_payment_amounts(payment: Payment) -> None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="The 2nd payment must be filled in before the 3rd."
         )
-    if first + second + third > float(payment.total_amount):
+    paid = first + second + third
+    if paid > total:
+        over = paid - total
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Total payments can't exceed the order's total amount."
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Payments total ₱{paid:,.2f} but the order is only ₱{total:,.2f} — that's ₱{over:,.2f} too much.",
         )
 
 
@@ -114,6 +153,7 @@ def create_payment(db: Session, data: PaymentCreate) -> Payment:
 
     payment = Payment(**data.model_dump())
     _validate_payment_amounts(payment)
+    _sync_payment_dates(payment)
     _recompute_balance(payment)
     db.add(payment)
     db.flush()
@@ -134,6 +174,7 @@ def update_payment(db: Session, payment_id: uuid.UUID, data: PaymentUpdate) -> P
     # change (e.g. just date_delivered) could get blocked by amounts that predate this rule.
     if {"first_payment", "second_payment", "third_payment"} & changes.keys():
         _validate_payment_amounts(payment)
+    _sync_payment_dates(payment)
     _recompute_balance(payment)
     _sync_order_completion(payment)
     db.commit()

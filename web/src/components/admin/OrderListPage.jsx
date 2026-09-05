@@ -9,6 +9,7 @@ import TransferOrderOverlay from '../TransferOrderOverlay.jsx'
 import NotesViewOverlay from '../NotesViewOverlay.jsx'
 import AddOrderOverlay from './AddOrderOverlay.jsx'
 import LoadingSpinner from '../LoadingSpinner.jsx'
+import ErrorBanner from '../ErrorBanner.jsx'
 import { listCompanies } from '../../lib/companiesApi.js'
 import { listOrders, updateOrder, deleteOrder } from '../../lib/ordersApi.js'
 import { listShoes } from '../../lib/shoesApi.js'
@@ -54,7 +55,11 @@ export default function OrderListPage({ companyId, mode }) {
   const [attributeOptions, setAttributeOptions] = useState({})
   const [companies, setCompanies] = useState([])
   const [isLoading, setIsLoading] = useState(true)
+  // Two kinds of failure, treated differently: a failed *fetch* leaves nothing to show, so
+  // it replaces the table. A failed *action* (save, archive, transfer) must not take the rows
+  // away — it shows as a dismissible banner above them.
   const [loadError, setLoadError] = useState(null)
+  const [actionError, setActionError] = useState(null)
   const [activeTab, setActiveTab] = useState('active')
   const [sort, setSort] = useState('newest')
   const [search, setSearch] = useState('')
@@ -189,9 +194,10 @@ export default function OrderListPage({ companyId, mode }) {
     // the whole batch fail with a generic message.
     const invalid = edited.find(([, draft]) => !(Number(draft.unit_price) > 0))
     if (invalid) {
-      setLoadError(`Price must be greater than 0 (check ${invalid[1].client_name || 'the edited rows'}).`)
+      setActionError(`Price must be greater than 0 (check ${invalid[1].client_name || 'the edited rows'}).`)
       return
     }
+    setActionError(null)
     setIsSavingEdits(true)
     try {
       await Promise.all(
@@ -217,7 +223,7 @@ export default function OrderListPage({ companyId, mode }) {
       setDrafts({})
       refresh()
     } catch (err) {
-      setLoadError(errorDetail(err, 'Could not save some changes. Please try again.'))
+      setActionError(errorDetail(err, 'Could not save some changes. Please try again.'))
     } finally {
       setIsSavingEdits(false)
     }
@@ -227,8 +233,8 @@ export default function OrderListPage({ companyId, mode }) {
     try {
       await updateOrder(order.id, { status: 'archived' })
       refresh()
-    } catch {
-      setLoadError('Could not archive that order. Please try again.')
+    } catch (err) {
+      setActionError(errorDetail(err, 'Could not archive that order. Please try again.'))
     }
   }
 
@@ -238,8 +244,8 @@ export default function OrderListPage({ companyId, mode }) {
     try {
       await updateOrder(order.id, { status: order.completed_at ? 'completed' : 'current' })
       refresh()
-    } catch {
-      setLoadError('Could not restore that order. Please try again.')
+    } catch (err) {
+      setActionError(errorDetail(err, 'Could not restore that order. Please try again.'))
     }
   }
 
@@ -247,8 +253,8 @@ export default function OrderListPage({ companyId, mode }) {
     try {
       await deleteOrder(order.id)
       refresh()
-    } catch {
-      setLoadError('Could not delete that order. Please try again.')
+    } catch (err) {
+      setActionError(errorDetail(err, 'Could not delete that order. Please try again.'))
     }
   }
 
@@ -258,8 +264,8 @@ export default function OrderListPage({ companyId, mode }) {
       await updateOrder(transferOrder.id, { company_id: newCompanyId })
       setTransferOrder(null)
       refresh()
-    } catch {
-      setLoadError('Could not transfer that order. Please try again.')
+    } catch (err) {
+      setActionError(errorDetail(err, 'Could not transfer that order. Please try again.'))
     } finally {
       setIsTransferring(false)
     }
@@ -438,6 +444,8 @@ export default function OrderListPage({ companyId, mode }) {
         onCancelEdits={handleCancelEdits}
         isSavingEdits={isSavingEdits}
       />
+
+      <ErrorBanner message={actionError} onDismiss={() => setActionError(null)} />
 
       <div className="mt-8">
         {isLoading ? (

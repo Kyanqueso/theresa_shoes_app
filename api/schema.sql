@@ -212,5 +212,14 @@ create table if not exists payments (
     third_payment          numeric(10, 2) not null default 0,
     balance                numeric(10, 2) not null,
     balance_cleared_date   date,
-    date_delivered         date
+    date_delivered         date,
+    -- Set automatically when each installment first receives an amount.
+    first_payment_date     date,
+    second_payment_date    date,
+    third_payment_date     date
 );
+
+alter table payments
+    add column if not exists first_payment_date date,
+    add column if not exists second_payment_date date,
+    add column if not exists third_payment_date date;

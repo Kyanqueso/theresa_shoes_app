@@ -236,6 +236,12 @@ class Payment(Base):
     first_payment = Column(Numeric(10, 2), nullable=False, default=0)
     second_payment = Column(Numeric(10, 2), nullable=False, default=0)
     third_payment = Column(Numeric(10, 2), nullable=False, default=0)
+    # When each installment was received. Filled in automatically the moment an installment
+    # is first given a non-zero amount, and cleared again if it's zeroed out, so the dates
+    # can never disagree with the amounts beside them.
+    first_payment_date = Column(Date, nullable=True)
+    second_payment_date = Column(Date, nullable=True)
+    third_payment_date = Column(Date, nullable=True)
     balance = Column(Numeric(10, 2), nullable=False)
     balance_cleared_date = Column(Date, nullable=True)
     date_delivered = Column(Date, nullable=True)

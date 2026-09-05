@@ -19,7 +19,7 @@ import { createOrder, uploadNotesImage } from '../lib/ordersApi.js'
 import { ApiError } from '../lib/apiClient.js'
 import { sanitizeText } from '../lib/textInput.js'
 import { isDeviceRecognized, verifyPin } from '../lib/auth.js'
-import { ownerViberChatUrl } from '../lib/businessContact.js'
+import { ownerViberChatUrl, toViberDigits, viberChatUrl } from '../lib/businessContact.js'
 import { findCloseMatchingCompany } from '../lib/companySimilarity.js'
 
 // Heel sizes offered in the dropdown.
@@ -433,14 +433,21 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
     window.open('https://www.messenger.com/', '_blank', 'noopener,noreferrer')
   }
 
+  /** Opens the guest's own Viber chat, using the number they entered on this form.
+   *
+   * viber://forward only ever opens a recipient picker, which is a dead end when we already
+   * know exactly which number this is for. Falls back to the picker only when no usable
+   * number was given — the contact field is optional. */
   const handleViberShare = async () => {
     const summary = buildOrderSummaryText()
     try {
       await navigator.clipboard.writeText(summary)
     } catch {
-      // clipboard access can fail (e.g. insecure context) - the forward dialog still opens
+      // Clipboard access can fail (insecure context) — the chat still opens, just unpasted.
     }
-    window.open(`viber://forward?text=${encodeURIComponent(summary)}`, '_blank', 'noopener,noreferrer')
+    const digits = toViberDigits(contactNumber)
+    const url = digits ? viberChatUrl(digits) : `viber://forward?text=${encodeURIComponent(summary)}`
+    window.open(url, '_blank', 'noopener,noreferrer')
   }
 
   const handleOwnerViberChat = async () => {

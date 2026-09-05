@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.config.timezone import business_today
 from app.db.models import Order, OrderStatus, Payment
 from app.schema.order import OrderCreate, OrderUpdate
-from app.services import company_service, image_service
+from app.services import company_service, image_service, payment_service
 
 
 def compute_order_total(unit_price: float | Decimal, quantity: int) -> Decimal:
@@ -113,8 +113,9 @@ def _resync_payment(order: Order) -> None:
         return
 
     payment.total_amount = compute_order_total(order.unit_price, order.quantity)
-    paid = float(payment.first_payment or 0) + float(payment.second_payment or 0) + float(payment.third_payment or 0)
-    payment.balance = float(payment.total_amount) - paid
+    # Reuses payment_service's exact-cents arithmetic so a balance recomputed from this side
+    # is identical to one recomputed from the payments table.
+    payment.balance = payment_service._money(payment.total_amount) - payment_service._paid_total(payment)
     payment.client_name = order.client_name
 
     if payment.balance > 0:
