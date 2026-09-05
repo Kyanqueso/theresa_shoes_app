@@ -8,8 +8,8 @@ import LoadingSpinner from '../../components/LoadingSpinner.jsx'
 import { listCompanies } from '../../lib/companiesApi.js'
 import { listOrders } from '../../lib/ordersApi.js'
 import { listPayments, updatePayment } from '../../lib/paymentsApi.js'
-import { usePagination } from '../../lib/usePagination.js'
 import { paymentFulfillment, PAYMENT_STATUS } from '../../lib/paymentStatus.js'
+import { errorDetail } from '../../lib/apiClient.js'
 
 function formatDate(value) {
   if (!value) return '—'
@@ -39,17 +39,31 @@ export default function Payments() {
   const [activeTab, setActiveTab] = useState('active')
   const [sort, setSort] = useState('newest')
   const [search, setSearch] = useState('')
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
 
   const [isEditing, setIsEditing] = useState(false)
   const [drafts, setDrafts] = useState({})
   const [isSavingEdits, setIsSavingEdits] = useState(false)
 
   const refresh = (isCancelled = () => false) => {
-    Promise.all([listPayments({ companyId }), listOrders({ companyId }), listCompanies()])
+    // One page of payments, filtered and sorted by Postgres. The matching orders are fetched
+    // alongside only so each row can show its order date and archived date.
+    const query = {
+      companyId,
+      search: search.trim() || undefined,
+      archived: activeTab === 'archive',
+      sort,
+      limit: pageSize,
+      offset: (page - 1) * pageSize,
+    }
+    Promise.all([listPayments(query), listOrders({ companyId, limit: 100 }), listCompanies()])
       .then(([paymentsData, ordersData, companiesData]) => {
         if (isCancelled()) return
-        setPayments(paymentsData)
-        setOrders(ordersData)
+        setPayments(paymentsData.items)
+        setTotal(paymentsData.total)
+        setOrders(ordersData.items)
         const company = companiesData.find((item) => item.id === companyId)
         setCompanyName(company?.name ?? 'Company')
         setLoadError(null)
@@ -68,32 +82,17 @@ export default function Payments() {
     return () => {
       cancelled = true
     }
-  }, [companyId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyId, activeTab, search, sort, page, pageSize])
 
-  const orderFor = (orderId) => orders.find((order) => order.id === orderId)
+  // Indexed once per render instead of a linear find per row per pass.
+  const ordersById = useMemo(() => new Map(orders.map((order) => [order.id, order])), [orders])
+  const orderFor = (orderId) => ordersById.get(orderId)
   const orderDate = (orderId) => orderFor(orderId)?.created_at
   const isArchiveTab = activeTab === 'archive'
 
-  const visible = useMemo(() => {
-    const filtered = payments
-      .filter((payment) => {
-        const isArchived = orderFor(payment.order_id)?.status === 'archived'
-        return isArchiveTab ? isArchived : !isArchived
-      })
-      .filter((payment) => (payment.client_name ?? '').toLowerCase().includes(search.trim().toLowerCase()))
-    return [...filtered].sort((a, b) => {
-      if (sort === 'az') return (a.client_name ?? '').localeCompare(b.client_name ?? '')
-      if (sort === 'za') return (b.client_name ?? '').localeCompare(a.client_name ?? '')
-      const dateA = orderFor(a.order_id)?.created_at
-      const dateB = orderFor(b.order_id)?.created_at
-      if (sort === 'oldest') return new Date(dateA) - new Date(dateB)
-      return new Date(dateB) - new Date(dateA)
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [payments, orders, isArchiveTab, search, sort])
-
-  const pagination = usePagination(visible.length)
-  const pageItems = pagination.slice(visible)
+  // Already filtered, searched, sorted and sliced server-side.
+  const pageItems = payments
 
   const handleEnterEdit = () => {
     const seed = {}
@@ -118,11 +117,31 @@ export default function Payments() {
     setDrafts((current) => ({ ...current, [paymentId]: { ...current[paymentId], [field]: value } }))
   }
 
+  /** Sends only the rows the user actually changed — a full page of untouched rows used to
+   * generate a PATCH each, and one rejection failed the entire batch. */
+  const changedDrafts = () =>
+    Object.entries(drafts).filter(([paymentId, draft]) => {
+      const original = payments.find((payment) => payment.id === paymentId)
+      if (!original) return false
+      return (
+        String(original.date_delivered ?? '') !== String(draft.date_delivered ?? '') ||
+        Number(original.first_payment ?? 0) !== Number(draft.first_payment ?? 0) ||
+        Number(original.second_payment ?? 0) !== Number(draft.second_payment ?? 0) ||
+        Number(original.third_payment ?? 0) !== Number(draft.third_payment ?? 0)
+      )
+    })
+
   const handleSaveEdits = async () => {
+    const edited = changedDrafts()
+    if (edited.length === 0) {
+      setIsEditing(false)
+      setDrafts({})
+      return
+    }
     setIsSavingEdits(true)
     try {
       await Promise.all(
-        Object.entries(drafts).map(([paymentId, draft]) =>
+        edited.map(([paymentId, draft]) =>
           updatePayment(paymentId, {
             date_delivered: draft.date_delivered || null,
             first_payment: Number(draft.first_payment) || 0,
@@ -134,8 +153,8 @@ export default function Payments() {
       setIsEditing(false)
       setDrafts({})
       refresh()
-    } catch {
-      setLoadError('Could not save some changes. Please try again.')
+    } catch (err) {
+      setLoadError(errorDetail(err, 'Could not save some changes. Please try again.'))
     } finally {
       setIsSavingEdits(false)
     }
@@ -203,11 +222,11 @@ export default function Payments() {
       <ListToolbar
         searchPlaceholder="Search Client Name..."
         search={search}
-        onSearchChange={setSearch}
+        onSearchChange={(value) => { setSearch(value); setPage(1) }}
         activeTab={activeTab}
-        onTabChange={setActiveTab}
+        onTabChange={(tab) => { setActiveTab(tab); setPage(1) }}
         sort={sort}
-        onSortChange={setSort}
+        onSortChange={(value) => { setSort(value); setPage(1) }}
         showEditButton={!isArchiveTab}
         isEditing={isEditing}
         onEnterEdit={handleEnterEdit}
@@ -247,11 +266,11 @@ export default function Payments() {
       </div>
 
       <Pagination
-        totalCount={visible.length}
-        page={pagination.page}
-        pageSize={pagination.pageSize}
-        onPageChange={pagination.setPage}
-        onPageSizeChange={pagination.setPageSize}
+        totalCount={total}
+        page={page}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
       />
     </div>
   )

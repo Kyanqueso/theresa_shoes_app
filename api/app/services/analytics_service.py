@@ -1,37 +1,54 @@
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 
 from sqlalchemy import extract, func
 from sqlalchemy.orm import Session
 
+from app.config.timezone import BUSINESS_TZ, business_now, business_today
 from app.db.models import Order, OrderStatus, Payment
+
+# Archived orders are void, not history — they are excluded from every figure here. The
+# admin UI applies the same rule, and the two must agree or the dashboard contradicts itself.
+_ACTIVE = Order.status != OrderStatus.archived
+
+# created_at is stored as UTC. Grouping by calendar year/month has to happen in shop-local
+# time or an order placed on the 1st at 07:00 Manila is counted in the previous month.
+_LOCAL_CREATED = func.timezone(BUSINESS_TZ.tzname(None), Order.created_at)
 
 
 def get_overview(db: Session, year: int | None = None) -> dict:
-    year = year or date.today().year
-    thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
+    year = year or business_today().year
+    thirty_days_ago = business_now() - timedelta(days=30)
 
-    uncollected_balance = db.query(func.coalesce(func.sum(Payment.balance), 0)).scalar()
-
-    total_sales = (
-        db.query(func.coalesce(func.sum(Order.unit_price * Order.quantity), 0))
-        .filter(extract("year", Order.created_at) == year)
+    # Only balances belonging to orders that still count.
+    uncollected_balance = (
+        db.query(func.coalesce(func.sum(Payment.balance), 0))
+        .join(Order, Payment.order_id == Order.id)
+        .filter(_ACTIVE)
         .scalar()
     )
 
-    total_orders = db.query(func.count(Order.id)).filter(Order.created_at >= thirty_days_ago).scalar()
+    total_sales = (
+        db.query(func.coalesce(func.sum(Order.unit_price * Order.quantity), 0))
+        .filter(_ACTIVE, extract("year", _LOCAL_CREATED) == year)
+        .scalar()
+    )
+
+    total_orders = (
+        db.query(func.count(Order.id)).filter(_ACTIVE, Order.created_at >= thirty_days_ago).scalar()
+    )
 
     pending_orders = (
         db.query(func.count(Order.id))
-        .filter(Order.created_at >= thirty_days_ago, Order.status == OrderStatus.current)
+        .filter(_ACTIVE, Order.created_at >= thirty_days_ago, Order.status == OrderStatus.current)
         .scalar()
     )
 
     monthly_rows = (
         db.query(
-            extract("month", Order.created_at).label("month"),
+            extract("month", _LOCAL_CREATED).label("month"),
             func.coalesce(func.sum(Order.unit_price * Order.quantity), 0).label("sales"),
         )
-        .filter(extract("year", Order.created_at) == year)
+        .filter(_ACTIVE, extract("year", _LOCAL_CREATED) == year)
         .group_by("month")
         .all()
     )

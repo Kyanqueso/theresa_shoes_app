@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.config.auth import require_admin_session
 from app.db.base import get_db
 from app.db.models import OrderStatus
-from app.schema.order import NotesImageOut, OrderCreate, OrderOut, OrderUpdate
+from app.schema.order import NotesImageOut, OrderCreate, OrderOut, OrderPage, OrderUpdate
 from app.services import order_service
 from app.services.image_service import ImageTooLargeError
 
@@ -19,13 +19,21 @@ router = APIRouter(prefix="/orders", tags=["orders"])
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # raw upload cap, before compression
 
 
-@router.get("", response_model=list[OrderOut], dependencies=[Depends(require_admin_session)])
+@router.get("", response_model=OrderPage, dependencies=[Depends(require_admin_session)])
 def list_orders(
     company_id: uuid.UUID | None = Query(default=None),
     status_filter: OrderStatus | None = Query(default=None, alias="status"),
+    search: str | None = Query(default=None, max_length=50),
+    completed: bool | None = Query(default=None),
+    sort: str = Query(default="newest"),
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ):
-    return order_service.list_orders(db, company_id, status_filter)
+    items, total = order_service.list_orders(
+        db, company_id, status_filter, search, completed, sort, limit, offset
+    )
+    return OrderPage(items=items, total=total)
 
 
 @router.post("", response_model=OrderOut, status_code=status.HTTP_201_CREATED)

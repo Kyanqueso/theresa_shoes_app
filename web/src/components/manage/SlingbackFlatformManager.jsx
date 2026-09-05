@@ -101,8 +101,7 @@ export default function SlingbackFlatformManager() {
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
 
-  const refresh = (showLoading = false, isCancelled = () => false) => {
-    if (showLoading) setIsLoading(true)
+  const refresh = (isCancelled = () => false) => {
     Promise.all([listAttributeOptions('slingback'), listAttributeOptions('flatform')])
       .then(([slingbackOptions, flatformOptions]) => {
         if (isCancelled()) return
@@ -114,13 +113,13 @@ export default function SlingbackFlatformManager() {
         if (!isCancelled()) setLoadError('Could not load right now.')
       })
       .finally(() => {
-        if (showLoading && !isCancelled()) setIsLoading(false)
+        if (!isCancelled()) setIsLoading(false)
       })
   }
 
   useEffect(() => {
     let cancelled = false
-    refresh(true, () => cancelled)
+    refresh(() => cancelled)
     return () => {
       cancelled = true
     }

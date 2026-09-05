@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import Company, CompanyStatus, Order, OrderStatus
 from app.schema.company import CompanyCreate, CompanyUpdate
+from app.services import image_service
 
 
 def _duplicate_name_error(name: str) -> HTTPException:
@@ -117,6 +118,13 @@ def delete_company(db: Session, company_id: uuid.UUID) -> bool:
     company = get_company(db, company_id)
     if company is None:
         return False
+    # Deleting a company cascades through its orders (and their payments). Each of those
+    # orders may carry uploaded note images, which Postgres won't clean up for us.
+    image_urls: list[str] = []
+    for order in company.orders:
+        image_urls.extend(image_service.collect_notes_image_urls(order.notes_blocks))
+
     db.delete(company)
     db.commit()
+    image_service.delete_images(image_urls)
     return True

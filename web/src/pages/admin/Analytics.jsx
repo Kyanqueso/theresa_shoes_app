@@ -21,10 +21,13 @@ const MONTH_LABELS = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ]
 
+// Only abbreviate once the number is actually big enough to benefit — rendering PHP 500
+// as "0.5K" is longer to read and less precise than just writing 500.
 const formatCompactCurrency = (value) => {
-  if (value === 0) return '0'
-  const thousands = (value / 1000).toFixed(1).replace(/\.0$/, '')
-  return `${thousands}K`
+  const n = Number(value) || 0
+  if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`
+  if (Math.abs(n) >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, '')}K`
+  return n.toLocaleString(undefined, { maximumFractionDigits: 0 })
 }
 const formatMoney = (value) => `₱${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const formatDate = (value) => (value ? new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—')
@@ -64,11 +67,11 @@ export default function Analytics() {
 
   useEffect(() => {
     let cancelled = false
-    Promise.all([listOrders({}), listPayments({}), listCompanies()])
+    Promise.all([listOrders({ limit: 100 }), listPayments({ limit: 100 }), listCompanies()])
       .then(([ordersData, paymentsData, companiesData]) => {
         if (cancelled) return
-        setOrders(ordersData)
-        setPayments(paymentsData)
+        setOrders(ordersData.items)
+        setPayments(paymentsData.items)
         setCompanies(companiesData)
         setLoadError(null)
       })

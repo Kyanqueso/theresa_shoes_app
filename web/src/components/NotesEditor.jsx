@@ -4,14 +4,17 @@ import NotesBlockList from './NotesBlockList.jsx'
 import { sanitizeText } from '../lib/textInput.js'
 
 const NOTE_COLORS = ['#000000', '#ef4444', '#2563eb', '#16a34a']
+// Matches the NotesBlock.value cap in the API schema. The Contact page invites customers to
+// "add any details", so a one-sentence limit was cutting people off mid-thought.
+const MAX_NOTE_LENGTH = 2000
 
 function TextBlock({ value, onChange }) {
   return (
     <textarea
       value={value}
-      onChange={(event) => onChange(sanitizeText(event.target.value))}
-      maxLength={50}
-      rows={2}
+      onChange={(event) => onChange(sanitizeText(event.target.value, MAX_NOTE_LENGTH))}
+      maxLength={MAX_NOTE_LENGTH}
+      rows={3}
       placeholder="Type here..."
       className="w-full resize-none rounded-lg border-0 bg-transparent px-0.5 py-1 text-sm text-gray-700 focus:outline-none focus:ring-0"
     />

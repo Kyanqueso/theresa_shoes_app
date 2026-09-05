@@ -80,27 +80,30 @@ export default function AttributeManager({ category, icon: Icon, label, itemLabe
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
 
-  const refresh = (showLoading = false, isCancelled = () => false) => {
-    if (showLoading) setIsLoading(true)
-    setLoadError(null)
+  const refresh = (isCancelled = () => false) => {
     listAttributeOptions(category)
       .then((data) => {
-        if (!isCancelled()) setOptions(data)
+        if (isCancelled()) return
+        setOptions(data)
+        setLoadError(null)
       })
       .catch(() => {
         if (!isCancelled()) setLoadError('Could not load right now.')
       })
       .finally(() => {
-        if (showLoading && !isCancelled()) setIsLoading(false)
+        if (!isCancelled()) setIsLoading(false)
       })
   }
 
   useEffect(() => {
     let cancelled = false
-    refresh(true, () => cancelled)
+    refresh(() => cancelled)
     return () => {
       cancelled = true
     }
+    // refresh is redefined every render; the fetch should only re-run when the category
+    // this manager is showing actually changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [category])
 
   const visible = options.filter((option) => option.name.toLowerCase().includes(search.trim().toLowerCase()))

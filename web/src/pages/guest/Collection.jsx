@@ -22,8 +22,6 @@ export default function Collection() {
 
   useEffect(() => {
     let cancelled = false
-    setIsLoading(true)
-    setLoadError(null)
 
     listShoes()
       .then((data) => {

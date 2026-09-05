@@ -103,24 +103,24 @@ export default function BuckleManager() {
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
 
-  const refresh = (showLoading = false, isCancelled = () => false) => {
-    if (showLoading) setIsLoading(true)
-    setLoadError(null)
+  const refresh = (isCancelled = () => false) => {
     listAttributeOptions('buckle')
       .then((data) => {
-        if (!isCancelled()) setOptions(data)
+        if (isCancelled()) return
+        setOptions(data)
+        setLoadError(null)
       })
       .catch(() => {
         if (!isCancelled()) setLoadError('Could not load buckles right now.')
       })
       .finally(() => {
-        if (showLoading && !isCancelled()) setIsLoading(false)
+        if (!isCancelled()) setIsLoading(false)
       })
   }
 
   useEffect(() => {
     let cancelled = false
-    refresh(true, () => cancelled)
+    refresh(() => cancelled)
     return () => {
       cancelled = true
     }

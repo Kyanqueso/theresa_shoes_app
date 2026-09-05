@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { ArrowRight, Footprints, Layers, Link as LinkIcon, Shapes, Triangle, Waves } from 'lucide-react'
 import ConfirmButton from '../components/ConfirmButton.jsx'
@@ -23,6 +23,34 @@ export default function ManageCollection() {
   const location = useLocation()
   const initialTab = TABS.some((tab) => tab.key === location.state?.initialTab) ? location.state.initialTab : 'shoes'
   const [activeTab, setActiveTab] = useState(initialTab)
+
+  // Header.jsx intercepts in-app navigation, but reloading, closing the tab or hitting the
+  // browser's back button bypasses React entirely. beforeunload covers reload/close; the
+  // browser shows its own confirmation and the wording is not ours to choose.
+  useEffect(() => {
+    const warn = (event) => {
+      event.preventDefault()
+      // Legacy browsers need returnValue set for the prompt to appear at all.
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [])
+
+  // Browser Back would silently drop out of manage mode. Push a throwaway history entry so
+  // Back lands here instead, then ask the same question the nav links ask.
+  useEffect(() => {
+    window.history.pushState(null, '', window.location.href)
+    const onPopState = () => {
+      if (window.confirm('Do you want to exit manage mode?')) {
+        navigate(`/collection/${tag}`)
+      } else {
+        window.history.pushState(null, '', window.location.href)
+      }
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [navigate, tag])
 
   return (
     <>

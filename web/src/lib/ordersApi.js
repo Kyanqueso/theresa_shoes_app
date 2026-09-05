@@ -1,9 +1,16 @@
 import { apiFetch, apiUpload } from './apiClient.js'
 
-export function listOrders({ companyId, status } = {}) {
+/** Returns { items, total }. Filtering, search, sort and paging all happen server-side so a
+ * page load fetches one page rather than the whole order history. */
+export function listOrders({ companyId, status, search, completed, sort, limit, offset } = {}) {
   const params = new URLSearchParams()
   if (companyId) params.set('company_id', companyId)
   if (status) params.set('status', status)
+  if (search) params.set('search', search)
+  if (completed !== undefined && completed !== null) params.set('completed', String(completed))
+  if (sort) params.set('sort', sort)
+  if (limit) params.set('limit', String(limit))
+  if (offset) params.set('offset', String(offset))
   const query = params.toString()
   return apiFetch(`/orders${query ? `?${query}` : ''}`)
 }

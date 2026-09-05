@@ -12,7 +12,7 @@ import PhoneNumberInput, { CONTACT_LENGTH, CONTACT_PREFIX } from '../components/
 import SwatchPicker from '../components/SwatchPicker.jsx'
 import PinOverlay from '../components/PinOverlay.jsx'
 import CloseMatchCompanyOverlay from '../components/CloseMatchCompanyOverlay.jsx'
-import { listShoes } from '../lib/shoesApi.js'
+import { getShoe, listShoes } from '../lib/shoesApi.js'
 import { listAttributeOptions } from '../lib/attributesApi.js'
 import { listCompanies } from '../lib/companiesApi.js'
 import { createOrder, uploadNotesImage } from '../lib/ordersApi.js'
@@ -176,7 +176,7 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
   const [materialGroup, setMaterialGroup] = useState(null)
   const [materialSwatch, setMaterialSwatch] = useState(null)
   const [colorCode, setColorCode] = useState('')
-  const [moldType, setMoldType] = useState(null)
+  const [moldTypeChoice, setMoldType] = useState(null)
   const [heelType, setHeelType] = useState(null)
   const [size, setSize] = useState(1)
   const [heelSize, setHeelSize] = useState(1)
@@ -185,7 +185,6 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
   const [buckleVariant, setBuckleVariant] = useState(null)
   const [withFlatform, setWithFlatform] = useState('No')
   const [withSlingback, setWithSlingback] = useState('No')
-  const [isCheckingDevice, setIsCheckingDevice] = useState(false)
   const [manageTarget, setManageTarget] = useState(null)
   const [isPinOpen, setIsPinOpen] = useState(false)
   const [isMaterialPickerOpen, setIsMaterialPickerOpen] = useState(false)
@@ -205,12 +204,12 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
 
   const images = shoe.images ?? []
 
-  useEffect(() => {
-    if (moldType !== null) return
-    const noneOption = (attributeOptions.mold_type ?? []).find((option) => option.name.trim().toLowerCase() === 'none')
-    if (noneOption) setMoldType(noneOption.id)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [attributeOptions.mold_type])
+  // A mold type literally named "None" is preselected when the guest hasn't chosen one.
+  // Derived rather than pushed into state from an effect, so there's no render where the
+  // value is briefly null and no second render to correct it.
+  const defaultMoldTypeId =
+    (attributeOptions.mold_type ?? []).find((option) => option.name.trim().toLowerCase() === 'none')?.id ?? null
+  const moldType = moldTypeChoice ?? defaultMoldTypeId
 
   useEffect(() => {
     if (cooldownRemaining <= 0) return undefined
@@ -442,9 +441,7 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
   }
 
   const handleManageClick = async (target) => {
-    setIsCheckingDevice(true)
     const ok = await isDeviceRecognized()
-    setIsCheckingDevice(false)
     if (!ok) {
       navigate('/403')
       return
@@ -680,12 +677,9 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
         imageUrl={preview?.imageUrl}
       />
 
-      <ImageLightbox
-        isOpen={isLightboxOpen}
-        images={images}
-        initialIndex={activeImage}
-        onClose={() => setIsLightboxOpen(false)}
-      />
+      {isLightboxOpen && (
+        <ImageLightbox images={images} initialIndex={activeImage} onClose={() => setIsLightboxOpen(false)} />
+      )}
 
       <PinOverlay
         isOpen={isPinOpen}
@@ -745,6 +739,7 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
 export default function ShoeDetails() {
   const { tag, shoeId } = useParams()
   const navigate = useNavigate()
+  const [shoe, setShoe] = useState(null)
   const [shoes, setShoes] = useState([])
   const [attributeOptions, setAttributeOptions] = useState({})
   const [companies, setCompanies] = useState([])
@@ -766,12 +761,14 @@ export default function ShoeDetails() {
 
   useEffect(() => {
     let cancelled = false
-    setIsLoading(true)
-    setLoadError(null)
 
-    Promise.all([listShoes(), listAttributeOptions(), listCompanies()])
-      .then(([shoesData, attributesData, companiesData]) => {
+    // getShoe(shoeId) is what actually renders this page — it returns the shoe even when it
+    // is hidden, so a hidden shoe's URL no longer reports "Shoe not found". listShoes() is
+    // still fetched, but only to power the Prev/Next arrows through the visible catalogue.
+    Promise.all([getShoe(shoeId), listShoes(), listAttributeOptions(), listCompanies()])
+      .then(([shoeData, shoesData, attributesData, companiesData]) => {
         if (cancelled) return
+        setShoe(shoeData)
         setShoes(shoesData)
         setAttributeOptions(groupAttributeOptions(attributesData))
         setCompanies(companiesData)
@@ -786,15 +783,13 @@ export default function ShoeDetails() {
     return () => {
       cancelled = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [shoeId])
 
   const sortedShoes = useMemo(
     () => [...shoes].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)),
     [shoes],
   )
   const currentIndex = sortedShoes.findIndex((item) => item.id === shoeId)
-  const shoe = currentIndex >= 0 ? sortedShoes[currentIndex] : null
   const prevShoe = currentIndex > 0 ? sortedShoes[currentIndex - 1] : null
   const nextShoe = currentIndex >= 0 && currentIndex < sortedShoes.length - 1 ? sortedShoes[currentIndex + 1] : null
 

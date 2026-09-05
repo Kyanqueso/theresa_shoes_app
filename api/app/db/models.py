@@ -73,6 +73,9 @@ class DevicePairingCode(Base):
     # Set the moment a code is redeemed, so a code can never be used twice.
     used_at = Column(DateTime(timezone=True), nullable=True)
     used_by_device_id = Column(UUID(as_uuid=True), ForeignKey("devices.id"), nullable=True)
+    # Timestamp of the last failed claim attempt, used to rate-limit guessing. Kept on the
+    # row because Lambda has no shared in-process state between invocations.
+    last_attempt_at = Column(DateTime(timezone=True), nullable=True)
 
 
 class AdminPin(Base):

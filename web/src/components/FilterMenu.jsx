@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Check, Filter } from 'lucide-react'
-import { SORT_OPTIONS } from './SortSelect.jsx'
+import { SORT_OPTIONS } from '../lib/sortOptions.js'
 
 export default function FilterMenu({ label, value, onChange }) {
   const [isOpen, setIsOpen] = useState(false)

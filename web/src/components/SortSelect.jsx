@@ -1,11 +1,5 @@
 import { ChevronDown } from 'lucide-react'
-
-export const SORT_OPTIONS = [
-  { value: 'newest', label: 'Newest First' },
-  { value: 'oldest', label: 'Oldest First' },
-  { value: 'az', label: 'Name: A to Z' },
-  { value: 'za', label: 'Name: Z to A' },
-]
+import { SORT_OPTIONS } from '../lib/sortOptions.js'
 
 export default function SortSelect({ value, onChange, className = '' }) {
   return (

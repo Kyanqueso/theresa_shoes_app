@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { X } from 'lucide-react'
 import NotesEditor from '../NotesEditor.jsx'
 import PhoneNumberInput, { CONTACT_LENGTH, CONTACT_PREFIX } from '../PhoneNumberInput.jsx'
@@ -7,6 +7,9 @@ import { sanitizeText } from '../../lib/textInput.js'
 import { ApiError } from '../../lib/apiClient.js'
 
 const MIN_DATE = '2000-01-01'
+// The shop is in Marikina (UTC+8). Sending a bare "2026-09-05T21:30" lets the server read it
+// as UTC, which pushes an evening order onto the next day. The offset makes it unambiguous.
+const BUSINESS_UTC_OFFSET = '+08:00'
 
 // FastAPI validation errors (422) return `detail` as an array of objects, not a string —
 // rendering that straight into JSX would crash. Only ever use it when it's actually a string.
@@ -87,7 +90,7 @@ export default function AddOrderOverlay({ isOpen, onClose, companyId, attributeO
   const [size, setSize] = useState(1)
   const [material, setMaterial] = useState(null)
   const [colorCode, setColorCode] = useState('')
-  const [moldType, setMoldType] = useState(null)
+  const [moldTypeChoice, setMoldType] = useState(null)
   const [heelType, setHeelType] = useState(null)
   const [heelSize, setHeelSize] = useState(1)
   const [withBuckle, setWithBuckle] = useState('No')
@@ -99,12 +102,10 @@ export default function AddOrderOverlay({ isOpen, onClose, companyId, attributeO
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState(null)
 
-  useEffect(() => {
-    if (moldType !== null) return
-    const noneOption = (attributeOptions.mold_type ?? []).find((option) => option.name.trim().toLowerCase() === 'none')
-    if (noneOption) setMoldType(noneOption.id)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [attributeOptions.mold_type])
+  // See ShoeDetails: derived, not set from an effect.
+  const defaultMoldTypeId =
+    (attributeOptions.mold_type ?? []).find((option) => option.name.trim().toLowerCase() === 'none')?.id ?? null
+  const moldType = moldTypeChoice ?? defaultMoldTypeId
 
   const findOption = (category, id) => (attributeOptions[category] ?? []).find((option) => option.id === id) ?? null
   const materialOption = findOption('material', material)
@@ -216,7 +217,7 @@ export default function AddOrderOverlay({ isOpen, onClose, companyId, attributeO
         with_slingback: withSlingback === 'Yes',
         unit_price: Number(price),
         notes_blocks: notesBlocks,
-        custom_created_at: `${orderDate}T${timeOfDay}`,
+        custom_created_at: `${orderDate}T${timeOfDay}${BUSINESS_UTC_OFFSET}`,
       })
       handleClose()
       onCreated?.()

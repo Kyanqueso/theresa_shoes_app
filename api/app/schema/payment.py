@@ -24,6 +24,11 @@ class PaymentUpdate(BaseModel):
     date_delivered: date | None = None
 
 
+class PaymentPage(BaseModel):
+    items: list["PaymentOut"]
+    total: int
+
+
 class PaymentOut(PaymentBase):
     model_config = ConfigDict(from_attributes=True)
 
@@ -32,3 +37,6 @@ class PaymentOut(PaymentBase):
     client_name: str | None = None
     balance: float
     balance_cleared_date: date | None = None
+
+
+PaymentPage.model_rebuild()

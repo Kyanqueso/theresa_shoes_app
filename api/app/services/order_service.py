@@ -2,8 +2,10 @@ import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.config.timezone import business_today
 from app.db.models import Order, OrderStatus, Payment
 from app.schema.order import OrderCreate, OrderUpdate
 from app.services import company_service, image_service
@@ -17,17 +19,50 @@ def compute_order_total(unit_price: float | Decimal, quantity: int) -> Decimal:
     return Decimal(str(unit_price)) * quantity
 
 
-def list_orders(
-    db: Session,
-    company_id: uuid.UUID | None = None,
-    status: OrderStatus | None = None,
-) -> list[Order]:
+def _order_query(db: Session, company_id, status, search, completed):
     query = db.query(Order)
     if company_id is not None:
         query = query.filter(Order.company_id == company_id)
     if status is not None:
         query = query.filter(Order.status == status)
-    return query.order_by(Order.created_at.desc()).all()
+    # Archived orders are split between the Orders and Completed Orders tabs by whether
+    # completed_at survived from before they were archived, so the caller can ask for either.
+    if completed is True:
+        query = query.filter(Order.completed_at.isnot(None))
+    elif completed is False:
+        query = query.filter(Order.completed_at.is_(None))
+    if search:
+        query = query.filter(Order.client_name.ilike(f"%{search.strip()}%"))
+    return query
+
+
+_ORDER_SORTS = {
+    "newest": Order.created_at.desc(),
+    "oldest": Order.created_at.asc(),
+    "az": Order.client_name.asc(),
+    "za": Order.client_name.desc(),
+}
+
+
+def list_orders(
+    db: Session,
+    company_id: uuid.UUID | None = None,
+    status: OrderStatus | None = None,
+    search: str | None = None,
+    completed: bool | None = None,
+    sort: str = "newest",
+    limit: int | None = None,
+    offset: int = 0,
+) -> tuple[list[Order], int]:
+    """Returns (page, total). Filtering, searching and sorting all happen in Postgres —
+    doing them in the browser would mean shipping every order to every admin page load,
+    which stops being viable long before the shop does."""
+    query = _order_query(db, company_id, status, search, completed)
+    total = query.with_entities(func.count(Order.id)).scalar() or 0
+    query = query.order_by(_ORDER_SORTS.get(sort, _ORDER_SORTS["newest"]))
+    if limit is not None:
+        query = query.limit(limit).offset(offset)
+    return query.all(), total
 
 
 def get_order(db: Session, order_id: uuid.UUID) -> Order | None:
@@ -62,6 +97,36 @@ def create_order(db: Session, data: OrderCreate) -> Order:
     return order
 
 
+def _resync_payment(order: Order) -> None:
+    """Keeps the order's payment in step after its quantity or unit price changed.
+
+    Without this the payment keeps the total it was created with, so balances, the
+    "Uncollected Balance" figure and the CSV export all silently drift from reality.
+
+    Raising the price on an order that was already settled means it is no longer settled, so
+    the order goes back to Current — it can't be "completed" while money is outstanding. That
+    mirrors _sync_order_completion in payment_service, which is the same rule seen from the
+    payment side. Archived orders are left alone; they're outside the lifecycle.
+    """
+    payment = order.payment
+    if payment is None:
+        return
+
+    payment.total_amount = compute_order_total(order.unit_price, order.quantity)
+    paid = float(payment.first_payment or 0) + float(payment.second_payment or 0) + float(payment.third_payment or 0)
+    payment.balance = float(payment.total_amount) - paid
+    payment.client_name = order.client_name
+
+    if payment.balance > 0:
+        # Money is owed again — the clearance date is no longer true.
+        payment.balance_cleared_date = None
+        if order.status == OrderStatus.completed:
+            order.status = OrderStatus.current
+            order.completed_at = None
+    elif payment.balance_cleared_date is None:
+        payment.balance_cleared_date = business_today()
+
+
 def update_order(db: Session, order_id: uuid.UUID, data: OrderUpdate) -> Order | None:
     order = get_order(db, order_id)
     if order is None:
@@ -83,6 +148,12 @@ def update_order(db: Session, order_id: uuid.UUID, data: OrderUpdate) -> Order |
             order.archived_at = None
     for field, value in changes.items():
         setattr(order, field, value)
+
+    # Anything that moves the money owed, or the name shown against it, has to reach the
+    # payment row too. Skipped for archived orders, which are out of the lifecycle.
+    if {"quantity", "unit_price", "client_name"} & changes.keys() and order.status != OrderStatus.archived:
+        _resync_payment(order)
+
     db.commit()
     db.refresh(order)
     return order
@@ -98,6 +169,9 @@ def delete_order(db: Session, order_id: uuid.UUID) -> bool:
     order = get_order(db, order_id)
     if order is None:
         return False
+    # The guest's photo/drawing attachments belong to this order alone, so they go with it.
+    image_urls = image_service.collect_notes_image_urls(order.notes_blocks)
     db.delete(order)
     db.commit()
+    image_service.delete_images(image_urls)
     return True

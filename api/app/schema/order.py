@@ -4,6 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.config.timezone import business_today, to_business
 from app.db.models import OrderStatus
 
 NotesBlockType = Literal[
@@ -57,10 +58,13 @@ class OrderCreate(OrderBase):
     @field_validator("custom_created_at")
     @classmethod
     def _validate_custom_created_at(cls, value: datetime | None) -> datetime | None:
+        """The admin form sends a wall-clock date/time with no offset. Interpreting that as
+        UTC would shift an evening order in Manila (UTC+8) onto the following day, so a naive
+        value is stamped as shop-local before anything compares or stores it."""
         if value is None:
             return value
-        today = datetime.now(value.tzinfo)
-        if value.date() > today.date():
+        value = to_business(value)
+        if value.date() > business_today():
             raise ValueError("Order date can't be in the future.")
         if value.year < 2000:
             raise ValueError("Order date can't be before the year 2000.")
@@ -105,3 +109,11 @@ class OrderOut(OrderBase):
 
 class NotesImageOut(BaseModel):
     image_url: str
+
+
+class OrderPage(BaseModel):
+    """Paged envelope. `total` is the count matching the filters, not the page size — the UI
+    needs it to render the page count without fetching every row just to measure them."""
+
+    items: list[OrderOut]
+    total: int

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Archive, ArrowRightLeft, Package, Share2, Trash2 } from 'lucide-react'
 import ListToolbar from '../ListToolbar.jsx'
 import DataTable from '../DataTable.jsx'
@@ -14,7 +14,7 @@ import { listOrders, updateOrder, deleteOrder } from '../../lib/ordersApi.js'
 import { listShoes } from '../../lib/shoesApi.js'
 import { listAttributeOptions } from '../../lib/attributesApi.js'
 import { sanitizeText } from '../../lib/textInput.js'
-import { usePagination } from '../../lib/usePagination.js'
+import { errorDetail } from '../../lib/apiClient.js'
 
 function formatDate(value) {
   if (!value) return '—'
@@ -58,6 +58,9 @@ export default function OrderListPage({ companyId, mode }) {
   const [activeTab, setActiveTab] = useState('active')
   const [sort, setSort] = useState('newest')
   const [search, setSearch] = useState('')
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
 
   const [isEditing, setIsEditing] = useState(false)
   const [drafts, setDrafts] = useState({})
@@ -70,10 +73,23 @@ export default function OrderListPage({ companyId, mode }) {
   const [isAddOpen, setIsAddOpen] = useState(false)
 
   const refresh = (isCancelled = () => false) => {
-    Promise.all([listOrders({ companyId }), listShoes(), listAttributeOptions(), listCompanies()])
+    // Server-side filtering/paging: only this page's rows come down the wire.
+    const query = {
+      companyId,
+      status: isArchiveTab ? 'archived' : mode === 'completed' ? 'completed' : 'current',
+      // Archived rows belong to whichever tab they were archived from, told apart by whether
+      // completed_at survived. Only meaningful on the archive tab.
+      completed: isArchiveTab ? mode === 'completed' : undefined,
+      search: search.trim() || undefined,
+      sort,
+      limit: pageSize,
+      offset: (page - 1) * pageSize,
+    }
+    Promise.all([listOrders(query), listShoes(), listAttributeOptions(), listCompanies()])
       .then(([ordersData, shoesData, attributesData, companiesData]) => {
         if (isCancelled()) return
-        setOrders(ordersData)
+        setOrders(ordersData.items)
+        setTotal(ordersData.total)
         setShoes(shoesData)
         const grouped = attributesData.reduce((acc, option) => {
           acc[option.category] = acc[option.category] ?? []
@@ -100,7 +116,8 @@ export default function OrderListPage({ companyId, mode }) {
     return () => {
       cancelled = true
     }
-  }, [companyId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyId, mode, isArchiveTab, search, sort, page, pageSize])
 
   // Manually-entered orders may not reference a real catalog shoe — fall back to the typed name.
   const modelName = (order) =>
@@ -110,31 +127,8 @@ export default function OrderListPage({ companyId, mode }) {
 
   const isArchiveTab = activeTab === 'archive'
 
-  // A single order.status can't be both "completed" and "archived" at once, so archived
-  // orders are told apart by whether completed_at survived from before they were archived —
-  // that way archiving from Orders vs. from Complete Orders lands in the right archive tab.
-  const matchesView = (order) => {
-    if (mode === 'completed') {
-      return isArchiveTab ? order.status === 'archived' && order.completed_at != null : order.status === 'completed'
-    }
-    return isArchiveTab ? order.status === 'archived' && order.completed_at == null : order.status === 'current'
-  }
-
-  const visible = useMemo(() => {
-    const filtered = orders
-      .filter(matchesView)
-      .filter((order) => order.client_name.toLowerCase().includes(search.trim().toLowerCase()))
-    return [...filtered].sort((a, b) => {
-      if (sort === 'oldest') return new Date(a.created_at) - new Date(b.created_at)
-      if (sort === 'az') return a.client_name.localeCompare(b.client_name)
-      if (sort === 'za') return b.client_name.localeCompare(a.client_name)
-      return new Date(b.created_at) - new Date(a.created_at)
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orders, mode, isArchiveTab, search, sort])
-
-  const pagination = usePagination(visible.length)
-  const pageItems = pagination.slice(visible)
+  // Postgres already filtered, searched, sorted and sliced — these rows are the page.
+  const pageItems = orders
 
   const handleEnterEdit = () => {
     const seed = {}
@@ -168,11 +162,38 @@ export default function OrderListPage({ companyId, mode }) {
     setDrafts((current) => ({ ...current, [orderId]: { ...current[orderId], [field]: value } }))
   }
 
+  /** Only rows the user actually touched are sent. Previously every row on the page was
+   * PATCHed on save — 50 visible rows meant 50 requests, and a single rejection failed the
+   * whole batch with no clue which row caused it. */
+  const changedDrafts = () =>
+    Object.entries(drafts).filter(([orderId, draft]) => {
+      const original = orders.find((order) => order.id === orderId)
+      if (!original) return false
+      return Object.entries(draft).some(([field, value]) => {
+        const before = original[field]
+        if (typeof before === 'boolean') return before !== value
+        return String(before ?? '') !== String(value ?? '')
+      })
+    })
+
   const handleSaveEdits = async () => {
+    const edited = changedDrafts()
+    if (edited.length === 0) {
+      setIsEditing(false)
+      setDrafts({})
+      return
+    }
+    // The API rejects unit_price <= 0, so catch it here and name the row instead of letting
+    // the whole batch fail with a generic message.
+    const invalid = edited.find(([, draft]) => !(Number(draft.unit_price) > 0))
+    if (invalid) {
+      setLoadError(`Price must be greater than 0 (check ${invalid[1].client_name || 'the edited rows'}).`)
+      return
+    }
     setIsSavingEdits(true)
     try {
       await Promise.all(
-        Object.entries(drafts).map(([orderId, draft]) =>
+        edited.map(([orderId, draft]) =>
           updateOrder(orderId, {
             client_name: draft.client_name.trim(),
             contact_number: draft.contact_number.trim() || null,
@@ -186,15 +207,15 @@ export default function OrderListPage({ companyId, mode }) {
             with_flatform: draft.with_flatform,
             with_slingback: draft.with_slingback,
             quantity: Number(draft.quantity) || 1,
-            unit_price: Number(draft.unit_price) || 0,
+            unit_price: Number(draft.unit_price),
           }),
         ),
       )
       setIsEditing(false)
       setDrafts({})
       refresh()
-    } catch {
-      setLoadError('Could not save some changes. Please try again.')
+    } catch (err) {
+      setLoadError(errorDetail(err, 'Could not save some changes. Please try again.'))
     } finally {
       setIsSavingEdits(false)
     }
@@ -400,11 +421,11 @@ export default function OrderListPage({ companyId, mode }) {
       <ListToolbar
         searchPlaceholder="Search Client Name..."
         search={search}
-        onSearchChange={setSearch}
+        onSearchChange={(value) => { setSearch(value); setPage(1) }}
         activeTab={activeTab}
-        onTabChange={setActiveTab}
+        onTabChange={(tab) => { setActiveTab(tab); setPage(1) }}
         sort={sort}
-        onSortChange={setSort}
+        onSortChange={(value) => { setSort(value); setPage(1) }}
         showAddButton={mode === 'orders'}
         addLabel="Add New Order"
         onAdd={() => setIsAddOpen(true)}
@@ -439,11 +460,11 @@ export default function OrderListPage({ companyId, mode }) {
       </div>
 
       <Pagination
-        totalCount={visible.length}
-        page={pagination.page}
-        pageSize={pagination.pageSize}
-        onPageChange={pagination.setPage}
-        onPageSizeChange={pagination.setPageSize}
+        totalCount={total}
+        page={page}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
       />
 
       <ShareOrderOverlay

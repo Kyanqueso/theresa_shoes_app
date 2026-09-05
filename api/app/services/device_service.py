@@ -13,6 +13,9 @@ from app.db.models import Device, DevicePairingCode
 # guessing is small; see claim_pairing_code for the rest of the reasoning.
 CODE_LENGTH = 6
 CODE_TTL_MINUTES = 10
+# Minimum gap between claim attempts. Cheap to enforce, and it's what makes a 6-digit code
+# defensible against guessing on an endpoint that can't require authentication.
+CLAIM_COOLDOWN_SECONDS = 10
 
 
 def _now() -> datetime:
@@ -42,8 +45,28 @@ def claim_pairing_code(db: Session, code: str, label: str | None) -> Device:
 
     Deliberately reachable without a device header — a device being paired has no token yet,
     so this is the one endpoint that cannot be behind require_valid_device. It stays safe
-    because a code is single-use, expires in 10 minutes, and only one exists at a time.
+    because a code is single-use, expires in 10 minutes, only one exists at a time, and a
+    wrong guess forces a cooldown before the next attempt (see below).
     """
+    live = (
+        db.query(DevicePairingCode)
+        .filter(DevicePairingCode.used_at.is_(None), DevicePairingCode.expires_at > _now())
+        .first()
+    )
+
+    # Throttle before checking the code. A 6-digit code is a million combinations, which is
+    # only meaningful if guesses are cheap — this makes each wrong guess cost 10 seconds,
+    # turning an afternoon's brute force into months. Tracked on the code row itself rather
+    # than in memory, because each Lambda invocation is a fresh process with no shared state.
+    if live is not None and live.last_attempt_at is not None:
+        elapsed = (_now() - live.last_attempt_at).total_seconds()
+        if elapsed < CLAIM_COOLDOWN_SECONDS:
+            wait = int(CLAIM_COOLDOWN_SECONDS - elapsed) + 1
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Too many attempts. Please wait {wait} second{'s' if wait != 1 else ''} and try again.",
+            )
+
     record = (
         db.query(DevicePairingCode)
         .filter(
@@ -54,6 +77,9 @@ def claim_pairing_code(db: Session, code: str, label: str | None) -> Device:
         .first()
     )
     if record is None:
+        if live is not None:
+            live.last_attempt_at = _now()
+            db.commit()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="That pairing code is invalid, already used, or has expired.",

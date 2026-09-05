@@ -244,24 +244,24 @@ export default function ShoeManager() {
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
 
-  const refresh = (showLoading = false, isCancelled = () => false) => {
-    if (showLoading) setIsLoading(true)
-    setLoadError(null)
+  const refresh = (isCancelled = () => false) => {
     listShoes({ includeHidden: true })
       .then((data) => {
-        if (!isCancelled()) setShoes(data)
+        if (isCancelled()) return
+        setShoes(data)
+        setLoadError(null)
       })
       .catch(() => {
         if (!isCancelled()) setLoadError('Could not load shoes right now.')
       })
       .finally(() => {
-        if (showLoading && !isCancelled()) setIsLoading(false)
+        if (!isCancelled()) setIsLoading(false)
       })
   }
 
   useEffect(() => {
     let cancelled = false
-    refresh(true, () => cancelled)
+    refresh(() => cancelled)
     return () => {
       cancelled = true
     }

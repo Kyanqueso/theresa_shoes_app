@@ -59,8 +59,12 @@ def delete_shoe(db: Session, shoe_id: uuid.UUID) -> bool:
     shoe = get_shoe(db, shoe_id)
     if shoe is None:
         return False
+    # Collect the URLs before the cascade removes the rows that point at them, otherwise the
+    # files stay in Storage with nothing left in the database referencing them.
+    image_urls = [image.image_url for image in shoe.images]
     db.delete(shoe)
     db.commit()
+    image_service.delete_images(image_urls)
     return True
 
 

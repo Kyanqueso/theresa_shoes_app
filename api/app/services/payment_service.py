@@ -1,9 +1,11 @@
 import uuid
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.config.timezone import business_today
 from app.db.models import Order, OrderStatus, Payment
 from app.schema.payment import PaymentCreate, PaymentUpdate
 
@@ -13,8 +15,13 @@ def _recompute_balance(payment: Payment) -> None:
     are plain float. Normalize both to float before doing arithmetic on them."""
     paid = float(payment.first_payment or 0) + float(payment.second_payment or 0) + float(payment.third_payment or 0)
     payment.balance = float(payment.total_amount) - paid
-    if payment.balance <= 0 and payment.balance_cleared_date is None:
-        payment.balance_cleared_date = date.today()
+    if payment.balance <= 0:
+        if payment.balance_cleared_date is None:
+            payment.balance_cleared_date = business_today()
+    else:
+        # Correcting an installment downward (or raising the order total) means money is owed
+        # again — leaving the old clearance date in place would claim the balance was settled.
+        payment.balance_cleared_date = None
 
 
 def _validate_payment_amounts(payment: Payment) -> None:
@@ -60,11 +67,40 @@ def _sync_order_completion(payment: Payment) -> None:
         order.completed_at = None
 
 
-def list_payments(db: Session, company_id: uuid.UUID | None = None) -> list[Payment]:
-    query = db.query(Payment)
+_PAYMENT_SORTS = {
+    "newest": Order.created_at.desc(),
+    "oldest": Order.created_at.asc(),
+    "az": Payment.client_name.asc(),
+    "za": Payment.client_name.desc(),
+}
+
+
+def list_payments(
+    db: Session,
+    company_id: uuid.UUID | None = None,
+    search: str | None = None,
+    archived: bool | None = None,
+    sort: str = "newest",
+    limit: int | None = None,
+    offset: int = 0,
+) -> tuple[list[Payment], int]:
+    """Returns (page, total). Always joins Order because every filter and sort the UI offers
+    is expressed in terms of the order behind the payment."""
+    query = db.query(Payment).join(Order, Payment.order_id == Order.id)
     if company_id is not None:
-        query = query.join(Order, Payment.order_id == Order.id).filter(Order.company_id == company_id)
-    return query.all()
+        query = query.filter(Order.company_id == company_id)
+    if archived is True:
+        query = query.filter(Order.status == OrderStatus.archived)
+    elif archived is False:
+        query = query.filter(Order.status != OrderStatus.archived)
+    if search:
+        query = query.filter(Payment.client_name.ilike(f"%{search.strip()}%"))
+
+    total = query.with_entities(func.count(Payment.id)).scalar() or 0
+    query = query.order_by(_PAYMENT_SORTS.get(sort, _PAYMENT_SORTS["newest"]))
+    if limit is not None:
+        query = query.limit(limit).offset(offset)
+    return query.all(), total
 
 
 def get_payment(db: Session, payment_id: uuid.UUID) -> Payment | None:

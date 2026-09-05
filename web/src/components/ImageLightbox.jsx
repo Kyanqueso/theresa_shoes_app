@@ -4,34 +4,27 @@ import { ChevronLeft, ChevronRight, X, ZoomIn, ZoomOut } from 'lucide-react'
 const MIN_ZOOM = 1
 const MAX_ZOOM = 3
 
-export default function ImageLightbox({ isOpen, images, initialIndex = 0, onClose }) {
+export default function ImageLightbox({ images, initialIndex = 0, onClose }) {
+  // The parent mounts this only while it is open, so state starts correct on every open
+  // and there is nothing to reset. (Previously an effect re-synced index/zoom on each open.)
   const [index, setIndex] = useState(initialIndex)
   const [zoom, setZoom] = useState(1)
   const imageRef = useRef(null)
 
   useEffect(() => {
-    if (isOpen) {
-      setIndex(initialIndex)
-      setZoom(1)
-    }
-  }, [isOpen, initialIndex])
-
-  useEffect(() => {
-    if (!isOpen) return undefined
     const handleKey = (event) => {
       if (event.key === 'Escape') onClose()
-      if (event.key === 'ArrowLeft') goTo(Math.max(0, index - 1))
-      if (event.key === 'ArrowRight') goTo(Math.min(images.length - 1, index + 1))
+      if (event.key === 'ArrowLeft') setIndex((i) => Math.max(0, i - 1))
+      if (event.key === 'ArrowRight') setIndex((i) => Math.min(images.length - 1, i + 1))
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') setZoom(1)
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, index, images.length])
+  }, [onClose, images.length])
 
   // React's synthetic onWheel is passive, so preventDefault() there is a no-op (and warns).
   // Attach a real, non-passive listener so scrolling to zoom doesn't also scroll the page behind it.
   useEffect(() => {
-    if (!isOpen) return undefined
     const node = imageRef.current
     if (!node) return undefined
     const handleWheel = (event) => {
@@ -40,9 +33,7 @@ export default function ImageLightbox({ isOpen, images, initialIndex = 0, onClos
     }
     node.addEventListener('wheel', handleWheel, { passive: false })
     return () => node.removeEventListener('wheel', handleWheel)
-  }, [isOpen, index])
-
-  if (!isOpen) return null
+  }, [index])
 
   const goTo = (newIndex) => {
     setIndex(newIndex)

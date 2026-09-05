@@ -1,54 +1,51 @@
-# Theresa Shoes App — Demo
+# Theresa Shoes
 
-A custom-shoe ordering app: guests browse the collection and submit orders, admins manage
-companies, orders, payments, and the catalog.
+Custom-shoe ordering app. Guests browse the collection and submit orders; the owner manages
+companies, orders, payments and the catalog from an admin panel.
 
-**This repo currently only has the `demo` branch published — a public showcase deploy.**
+- `api/` — FastAPI + SQLAlchemy on AWS Lambda (Mangum), Supabase Postgres + Storage
+- `web/` — React + Vite on Vercel
 
-## Live demo
+## Environments
 
-- **Site**: https://web-kappa-two-18.vercel.app
-- **Admin panel**: click "Admin" → enter any 4 digits as the PIN, no real PIN needed.
+| | Frontend | Backend stack | Database |
+|---|---|---|---|
+| **Production** | `theresa-shoes-app-final.vercel.app` (branch `master`) | `theresa-shoes-api-prod` | Supabase (Singapore) |
+| **Demo** | `web-kappa-two-18.vercel.app` (branch `demo`) | `theresa-shoes-api` | Supabase (separate) |
 
-This is a showcase build, not the real production app:
-- The PIN check is bypassed — any 4 digits log you into the admin panel.
-- Real owner contact info (name, phone, email) is blurred/hidden on the Contact page and footer.
-- The "Contact Us in Viber" button is disabled here (shows a note instead of messaging the
-  real owner).
+The demo runs with `DEMO_MODE=true`, which accepts any PIN and hides the owner's real contact
+details. Production has it off.
 
-These are controlled by `DEMO_MODE=true` (backend) and `VITE_DEMO_MODE=true` (frontend) — see
-where `demo_mode` / `isDemoMode` are checked in the code.
+## Admin access
 
-The real (`master`) app is under ongoing modification as requested by the client — features
-and fixes land there as they're commissioned, and it isn't published yet. This demo isn't a
-stripped-down preview, though: feature-wise, it's effectively the whole thing as it stands
-today, just with the PIN check bypassed and the owner's real contact info hidden.
-
-## Structure
-
-- `api/` — FastAPI + SQLAlchemy backend, deployed to AWS Lambda (via Mangum) behind API Gateway.
-  Data lives in Supabase Postgres.
-- `web/` — React + Vite frontend, deployed to Vercel.
+Two layers. A device must be on the allowlist (`devices` table) to reach the PIN screen at
+all; then a 4-digit PIN issues a session. New devices join via **Admin → Devices → Add
+Device**, which prints a single-use code to enter on the new device at `/pair`.
 
 ## Local development
 
 ```
 # backend
-cd api
-python -m venv venv && venv\Scripts\activate
+cd api && python -m venv venv && venv\Scripts\activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 
 # frontend
-cd web
-npm install
-npm run dev
+cd web && npm install && npm run dev
 ```
 
-Both need a `.env` file (see `api/.env`'s existing keys) — not committed, ask for the values.
+Both need a `.env` (not committed). `api/.env` needs `DATABASE_URL`, `SUPABASE_URL`,
+`SUPABASE_SERVICE_KEY`, `JWT_SECRET`, `PIN_PEPPER`, `ADMIN_EMAIL`, `CORS_ORIGINS`.
+`web/.env` needs `VITE_API_URL`.
 
 ## Deploying
 
-- Backend: `cd api && sam build --use-container && sam deploy` (see `api/template.yaml`).
-- Frontend: `cd web && vercel --prod` (env vars are set in the Vercel project settings, not
-  in `.env`).
+- **Backend:** `cd api && py -m samcli build --use-container && py -m samcli deploy`
+  (Docker must be running — Pillow and psycopg2 need Linux binaries.) Parameters live in
+  `api/samconfig.toml`, which is gitignored because it holds secrets.
+- **Frontend:** push to `master`. Vercel builds automatically.
+
+## Schema
+
+`api/app/db/models.py` is the source of truth; `api/schema.sql` is the runnable bootstrap,
+maintained by hand. There are no migrations — keep the two in sync when you change a model.

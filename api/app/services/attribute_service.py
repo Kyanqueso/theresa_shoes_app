@@ -75,10 +75,18 @@ def delete_attribute_option(db: Session, option_id: uuid.UUID) -> bool:
     option = get_attribute_option(db, option_id)
     if option is None:
         return False
-    if option.image_url:
-        image_service.delete_image(option.image_url)
+
+    # Deleting a material group cascades to its swatches in Postgres (ON DELETE CASCADE), but
+    # the cascade knows nothing about Storage — gather the children's images too or their
+    # files are stranded in the bucket forever.
+    child_urls = [
+        child.image_url
+        for child in db.query(ShoeAttributeOption).filter(ShoeAttributeOption.parent_id == option_id).all()
+    ]
+
     db.delete(option)
     db.commit()
+    image_service.delete_images([option.image_url, *child_urls])
     return True
 
 

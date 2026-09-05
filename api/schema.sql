@@ -54,8 +54,12 @@ create table if not exists device_pairing_codes (
     created_at         timestamptz not null default now(),
     expires_at         timestamptz not null,
     used_at            timestamptz,
-    used_by_device_id  uuid references devices(id)
+    used_by_device_id  uuid references devices(id),
+    -- Last failed claim attempt; enforces a cooldown between guesses.
+    last_attempt_at    timestamptz
 );
+
+alter table device_pairing_codes add column if not exists last_attempt_at timestamptz;
 
 create index if not exists ix_device_pairing_codes_code on device_pairing_codes(code);
 

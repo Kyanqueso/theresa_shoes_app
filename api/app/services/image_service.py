@@ -54,9 +54,44 @@ def upload_image(data: bytes, folder: str) -> str:
 def delete_image(image_url: str) -> None:
     """Best-effort removal of a previously uploaded image from Storage, given its public URL."""
     marker = f"/{BUCKET_NAME}/"
-    if marker not in image_url:
+    if not image_url or marker not in image_url:
         return
     path = image_url.split(marker, 1)[1].split("?", 1)[0]
 
     client = get_supabase()
     client.storage.from_(BUCKET_NAME).remove([path])
+
+
+def delete_images(image_urls: list[str | None]) -> None:
+    """Removes several images in one call, ignoring blanks and anything not in our bucket.
+
+    Deletes cascade in the database (a shoe takes its images, a material takes its swatches,
+    a company takes its orders), but Postgres knows nothing about Storage — so without an
+    explicit sweep every cascade leaves files behind that nothing will ever reference or
+    reclaim. Best-effort by design: a failure here must not roll back the delete itself.
+    """
+    marker = f"/{BUCKET_NAME}/"
+    paths = [
+        url.split(marker, 1)[1].split("?", 1)[0]
+        for url in image_urls
+        if url and marker in url
+    ]
+    if not paths:
+        return
+    try:
+        get_supabase().storage.from_(BUCKET_NAME).remove(paths)
+    except Exception:  # noqa: BLE001 - storage cleanup must never block the DB delete
+        pass
+
+
+def collect_notes_image_urls(notes_blocks: list | None) -> list[str]:
+    """Pulls the uploaded photo/drawing URLs out of an order's notes_blocks.
+    Selection blocks are skipped — their `value` points at a shared attribute image that
+    other orders still reference, so deleting it would blank out unrelated records."""
+    if not notes_blocks:
+        return []
+    return [
+        block.get("value")
+        for block in notes_blocks
+        if isinstance(block, dict) and block.get("type") in ("photo", "drawing") and block.get("value")
+    ]
