@@ -1,6 +1,6 @@
 from datetime import date, timedelta
 
-from sqlalchemy import extract, func
+from sqlalchemy import Date, case, cast, extract, func, literal_column, select, union_all
 from sqlalchemy.orm import Session
 
 from app.config.timezone import BUSINESS_TZ, business_now, business_today
@@ -13,6 +13,37 @@ _ACTIVE = Order.status != OrderStatus.archived
 # created_at is stored as UTC. Grouping by calendar year/month has to happen in shop-local
 # time or an order placed on the 1st at 07:00 Manila is counted in the previous month.
 _LOCAL_CREATED = func.timezone(BUSINESS_TZ.tzname(None), Order.created_at)
+
+# The three installments, each with the date it was received.
+_INSTALLMENT_COLUMNS = (
+    (Payment.first_payment, Payment.first_payment_date),
+    (Payment.second_payment, Payment.second_payment_date),
+    (Payment.third_payment, Payment.third_payment_date),
+)
+
+
+def _payments_received():
+    """One row per installment actually received: (amount, date it was received).
+
+    Sales are counted as money collected, not as orders placed. An order sitting unpaid is
+    not revenue, and an order paid across three months is revenue in three months — so each
+    installment is attributed to the day it arrived rather than to the order's date.
+
+    Installments recorded before per-installment dates existed have an amount but no date;
+    those fall back to the order's own date, which is the closest thing available. Without
+    the fallback all historical revenue would silently vanish from the dashboard.
+    """
+    selects = [
+        select(
+            amount_col.label("amount"),
+            func.coalesce(date_col, cast(_LOCAL_CREATED, Date)).label("received_on"),
+        )
+        .select_from(Payment)
+        .join(Order, Payment.order_id == Order.id)
+        .where(_ACTIVE, amount_col > 0)
+        for amount_col, date_col in _INSTALLMENT_COLUMNS
+    ]
+    return union_all(*selects).subquery()
 
 
 def get_overview(db: Session, year: int | None = None) -> dict:
@@ -27,9 +58,14 @@ def get_overview(db: Session, year: int | None = None) -> dict:
         .scalar()
     )
 
+    received = _payments_received()
+    amount = literal_column("amount")
+    received_on = literal_column("received_on")
+
     total_sales = (
-        db.query(func.coalesce(func.sum(Order.unit_price * Order.quantity), 0))
-        .filter(_ACTIVE, extract("year", _LOCAL_CREATED) == year)
+        db.query(func.coalesce(func.sum(amount), 0))
+        .select_from(received)
+        .filter(extract("year", received_on) == year)
         .scalar()
     )
 
@@ -45,11 +81,12 @@ def get_overview(db: Session, year: int | None = None) -> dict:
 
     monthly_rows = (
         db.query(
-            extract("month", _LOCAL_CREATED).label("month"),
-            func.coalesce(func.sum(Order.unit_price * Order.quantity), 0).label("sales"),
+            extract("month", received_on).label("month"),
+            func.coalesce(func.sum(amount), 0).label("sales"),
         )
-        .filter(_ACTIVE, extract("year", _LOCAL_CREATED) == year)
-        .group_by("month")
+        .select_from(received)
+        .filter(extract("year", received_on) == year)
+        .group_by(extract("month", received_on))
         .all()
     )
     sales_by_month = {int(row.month): float(row.sales) for row in monthly_rows}

@@ -81,6 +81,14 @@ export default function OrderListPage({ companyId, mode }) {
   // further down puts it in the temporal dead zone when the dependency array is evaluated.
   const isArchiveTab = activeTab === 'archive'
 
+  // A completed order has been made and delivered — changing its size, material or price
+  // after the fact would rewrite history and, worse, silently reopen it (raising the price
+  // pushes it back to Current). Only the contact details stay editable, since those are
+  // about reaching the customer rather than about the order itself.
+  const isCompletedView = mode === 'completed'
+  const EDITABLE_WHEN_COMPLETED = ['client_name', 'contact_number']
+  const canEditField = (field) => !isCompletedView || EDITABLE_WHEN_COMPLETED.includes(field)
+
   const refresh = (isCancelled = () => false) => {
     // Server-side filtering/paging: only this page's rows come down the wire.
     const query = {
@@ -192,7 +200,7 @@ export default function OrderListPage({ companyId, mode }) {
     }
     // The API rejects unit_price <= 0, so catch it here and name the row instead of letting
     // the whole batch fail with a generic message.
-    const invalid = edited.find(([, draft]) => !(Number(draft.unit_price) > 0))
+    const invalid = isCompletedView ? null : edited.find(([, draft]) => !(Number(draft.unit_price) > 0))
     if (invalid) {
       setActionError(`Price must be greater than 0 (check ${invalid[1].client_name || 'the edited rows'}).`)
       return
@@ -201,23 +209,31 @@ export default function OrderListPage({ companyId, mode }) {
     setIsSavingEdits(true)
     try {
       await Promise.all(
-        edited.map(([orderId, draft]) =>
-          updateOrder(orderId, {
-            client_name: draft.client_name.trim(),
-            contact_number: draft.contact_number.trim() || null,
-            material_id: draft.material_id || null,
-            color_code: draft.color_code.trim() || null,
-            mold_type_id: draft.mold_type_id || null,
-            heel_type_id: draft.heel_type_id || null,
-            size: draft.size === '' ? null : Number(draft.size),
-            heel_size: draft.heel_size === '' ? null : Number(draft.heel_size),
-            with_buckle: draft.with_buckle,
-            with_flatform: draft.with_flatform,
-            with_slingback: draft.with_slingback,
-            quantity: Number(draft.quantity) || 1,
-            unit_price: Number(draft.unit_price),
-          }),
-        ),
+        edited.map(([orderId, draft]) => {
+          // Completed orders accept only the contact details. Sending the rest would let a
+          // stale draft value through and, via the price, silently reopen the order.
+          const payload = isCompletedView
+            ? {
+                client_name: draft.client_name.trim(),
+                contact_number: draft.contact_number.trim() || null,
+              }
+            : {
+                client_name: draft.client_name.trim(),
+                contact_number: draft.contact_number.trim() || null,
+                material_id: draft.material_id || null,
+                color_code: draft.color_code.trim() || null,
+                mold_type_id: draft.mold_type_id || null,
+                heel_type_id: draft.heel_type_id || null,
+                size: draft.size === '' ? null : Number(draft.size),
+                heel_size: draft.heel_size === '' ? null : Number(draft.heel_size),
+                with_buckle: draft.with_buckle,
+                with_flatform: draft.with_flatform,
+                with_slingback: draft.with_slingback,
+                quantity: Number(draft.quantity) || 1,
+                unit_price: Number(draft.unit_price),
+              }
+          return updateOrder(orderId, payload)
+        }),
       )
       setIsEditing(false)
       setDrafts({})
@@ -327,19 +343,25 @@ export default function OrderListPage({ companyId, mode }) {
     orderDate: formatDate(order.created_at),
     ...(mode === 'completed' ? { completedDate: formatDate(order.completed_at) } : {}),
     ...(isArchiveTab ? { archivedDate: formatDate(order.archived_at) } : {}),
-    size: isEditing ? numberField(order, 'size', 'w-12') : order.size ?? '—',
-    material: isEditing ? optionField(order, 'material_id', 'material') : optionName('material', order.material_id),
-    color: isEditing ? textField(order, 'color_code', 'w-16') : order.color_code || '—',
-    mold: isEditing ? optionField(order, 'mold_type_id', 'mold_type') : optionName('mold_type', order.mold_type_id),
-    heelType: isEditing
+    size: isEditing && canEditField('size') ? numberField(order, 'size', 'w-12') : order.size ?? '—',
+    material: isEditing && canEditField('material_id')
+      ? optionField(order, 'material_id', 'material')
+      : optionName('material', order.material_id),
+    color: isEditing && canEditField('color_code') ? textField(order, 'color_code', 'w-16') : order.color_code || '—',
+    mold: isEditing && canEditField('mold_type_id')
+      ? optionField(order, 'mold_type_id', 'mold_type')
+      : optionName('mold_type', order.mold_type_id),
+    heelType: isEditing && canEditField('heel_type_id')
       ? optionField(order, 'heel_type_id', 'heel_type')
       : optionName('heel_type', order.heel_type_id),
-    heelSize: isEditing ? numberField(order, 'heel_size', 'w-12') : order.heel_size ?? '—',
-    buckle: isEditing ? yesNoField(order, 'with_buckle') : order.with_buckle ? 'Yes' : 'No',
-    flatform: isEditing ? yesNoField(order, 'with_flatform') : order.with_flatform ? 'Yes' : 'No',
-    slingback: isEditing ? yesNoField(order, 'with_slingback') : order.with_slingback ? 'Yes' : 'No',
-    quantity: isEditing ? numberField(order, 'quantity', 'w-12') : order.quantity,
-    price: isEditing ? numberField(order, 'unit_price', 'w-16') : Number(order.unit_price).toLocaleString(),
+    heelSize: isEditing && canEditField('heel_size') ? numberField(order, 'heel_size', 'w-12') : order.heel_size ?? '—',
+    buckle: isEditing && canEditField('with_buckle') ? yesNoField(order, 'with_buckle') : order.with_buckle ? 'Yes' : 'No',
+    flatform: isEditing && canEditField('with_flatform') ? yesNoField(order, 'with_flatform') : order.with_flatform ? 'Yes' : 'No',
+    slingback: isEditing && canEditField('with_slingback') ? yesNoField(order, 'with_slingback') : order.with_slingback ? 'Yes' : 'No',
+    quantity: isEditing && canEditField('quantity') ? numberField(order, 'quantity', 'w-12') : order.quantity,
+    price: isEditing && canEditField('unit_price')
+      ? numberField(order, 'unit_price', 'w-16')
+      : Number(order.unit_price).toLocaleString(),
     notes: (
       <button
         type="button"
@@ -444,6 +466,12 @@ export default function OrderListPage({ companyId, mode }) {
         onCancelEdits={handleCancelEdits}
         isSavingEdits={isSavingEdits}
       />
+
+      {isEditing && isCompletedView && (
+        <p className="mt-4 rounded-lg bg-golden-brown/10 px-4 py-3 text-sm text-golden-brown">
+          This order is completed — only the client name and contact number can be changed.
+        </p>
+      )}
 
       <ErrorBanner message={actionError} onDismiss={() => setActionError(null)} />
 

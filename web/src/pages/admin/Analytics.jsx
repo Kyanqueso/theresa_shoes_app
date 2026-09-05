@@ -15,6 +15,7 @@ import SortSelect from '../../components/SortSelect.jsx'
 import { listOrders } from '../../lib/ordersApi.js'
 import { listPayments } from '../../lib/paymentsApi.js'
 import { listCompanies } from '../../lib/companiesApi.js'
+import { getAnalyticsOverview } from '../../lib/analyticsApi.js'
 import { paymentFulfillment, PAYMENT_STATUS } from '../../lib/paymentStatus.js'
 
 const MONTH_LABELS = [
@@ -59,6 +60,7 @@ export default function Analytics() {
   const [orders, setOrders] = useState([])
   const [payments, setPayments] = useState([])
   const [companies, setCompanies] = useState([])
+  const [overview, setOverview] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
   const [isBalanceModalOpen, setIsBalanceModalOpen] = useState(false)
@@ -67,9 +69,18 @@ export default function Analytics() {
 
   useEffect(() => {
     let cancelled = false
-    Promise.all([listOrders({ limit: 100 }), listPayments({ limit: 100 }), listCompanies()])
-      .then(([ordersData, paymentsData, companiesData]) => {
+    // The overview drives the four tiles and the chart and is aggregated in SQL over every
+    // row. The order/payment lists are only for the "uncollected balance" drill-down table
+    // and the CSV export, which show individual records rather than totals.
+    Promise.all([
+      getAnalyticsOverview(),
+      listOrders({ limit: 100 }),
+      listPayments({ limit: 100 }),
+      listCompanies(),
+    ])
+      .then(([overviewData, ordersData, paymentsData, companiesData]) => {
         if (cancelled) return
+        setOverview(overviewData)
         setOrders(ordersData.items)
         setPayments(paymentsData.items)
         setCompanies(companiesData)
@@ -90,32 +101,16 @@ export default function Analytics() {
   const companyName = (id) => companies.find((company) => company.id === id)?.name ?? 'Unknown Company'
 
   const stats = useMemo(() => {
-    const now = new Date()
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-
     // Archived orders/payments are excluded from every analytics figure — they're void, not history.
     const activeOrders = orders.filter((order) => order.status !== 'archived')
     const activeOrderIds = new Set(activeOrders.map((order) => order.id))
     const activePayments = payments.filter((payment) => activeOrderIds.has(payment.order_id))
 
-    const uncollectedBalance = activePayments.reduce((sum, payment) => sum + Number(payment.balance), 0)
-
-    const ordersThisYear = activeOrders.filter((order) => new Date(order.created_at).getFullYear() === year)
-    const totalSales = ordersThisYear.reduce((sum, order) => sum + Number(order.unit_price) * order.quantity, 0)
-
-    const ordersLast30Days = activeOrders.filter((order) => new Date(order.created_at) >= thirtyDaysAgo)
-    const totalOrders = ordersLast30Days.length
-    const pendingOrders = ordersLast30Days.filter((order) => order.status === 'current').length
-
-    const monthlySales = Array.from({ length: 12 }, () => 0)
-    for (const order of ordersThisYear) {
-      const monthIndex = new Date(order.created_at).getMonth()
-      monthlySales[monthIndex] += Number(order.unit_price) * order.quantity
-    }
-
-    return { uncollectedBalance, totalSales, totalOrders, pendingOrders, monthlySales, activeOrders, activePayments }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orders, payments, companies, year])
+    // Headline numbers come from the server — see analyticsApi. Only the record lists behind
+    // the drill-down are derived here.
+    return { activeOrders, activePayments }
+     
+  }, [orders, payments])
 
   // Every undelivered or unpaid active order — the underlying detail behind "Uncollected Balance".
   const outstandingRecords = useMemo(() => {
@@ -201,35 +196,37 @@ export default function Analytics() {
 
   const chartData = MONTH_LABELS.map((month, index) => ({
     month: `${month} ${year}`,
-    sales: stats.monthlySales?.[index] ?? 0,
+    sales: overview?.monthly_sales?.[index]?.sales ?? 0,
   }))
 
   const STATS = [
     {
       icon: Landmark,
       label: 'Uncollected Balance',
-      range: `Jan ${year} - Dec ${year}`,
-      value: formatMoney(stats.uncollectedBalance ?? 0),
+      range: 'Still owed on active orders',
+      value: formatMoney(overview?.uncollected_balance ?? 0),
       action: 'View Uncollected Balance',
       onAction: () => setIsBalanceModalOpen(true),
     },
     {
       icon: BadgeDollarSign,
       label: 'Total Sales',
-      range: `Jan ${year} - Dec ${year}`,
-      value: formatMoney(stats.totalSales ?? 0),
+      // Money actually collected, not the value of orders placed — an unpaid order is not
+      // revenue, and an order paid in instalments is revenue on the days it was paid.
+      range: `Payments received · ${year}`,
+      value: formatMoney(overview?.total_sales ?? 0),
     },
     {
       icon: Package,
       label: 'Total Orders',
       range: 'Last 30 Days',
-      value: String(stats.totalOrders ?? 0),
+      value: String(overview?.total_orders ?? 0),
     },
     {
       icon: Hourglass,
       label: 'Pending Orders',
       range: 'Last 30 Days',
-      value: String(stats.pendingOrders ?? 0),
+      value: String(overview?.pending_orders ?? 0),
     },
   ]
 
@@ -303,8 +300,8 @@ export default function Analytics() {
 
       <div className="mt-8 rounded-xl bg-white p-6 shadow-sm ring-1 ring-black/5">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold text-black">Year to Date Sales</h2>
-          <span className="text-xl font-bold text-black">{formatCompactCurrency(stats.totalSales ?? 0)}</span>
+          <h2 className="text-lg font-bold text-black">Payments Received This Year</h2>
+          <span className="text-xl font-bold text-black">{formatCompactCurrency(overview?.total_sales ?? 0)}</span>
         </div>
 
         <div className="mt-4 h-80">
@@ -345,7 +342,7 @@ export default function Analytics() {
 
         <p className="mt-2 flex items-center justify-center gap-2 text-sm text-gray-500">
           <span className="inline-block h-0 w-4 border-t-2 border-dashed border-primary" />
-          Total Sales Per Month
+          Payments received per month
         </p>
       </div>
 

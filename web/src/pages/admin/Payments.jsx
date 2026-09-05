@@ -17,23 +17,11 @@ function formatDate(value) {
   return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-/** Short form for the date stamped under each installment — the full format would push an
- * already-wide table wider still. */
-function formatShortDate(value) {
-  if (!value) return null
-  return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
-
-/** An installment amount with the day it was received underneath. The date is set by the
- * server the moment an amount is entered, so it always matches the figure above it. */
-function PaidCell({ amount, date }) {
-  const shown = formatShortDate(date)
-  return (
-    <div className="leading-tight">
-      <span>{amount}</span>
-      {shown && <span className="block text-[10px] font-medium text-gray-500">{shown}</span>}
-    </div>
-  )
+/** Compact date for the per-installment columns — the long form would make an already-wide
+ * table unusable. Set by the server when an amount is entered, so it always matches. */
+function formatPayDate(value) {
+  if (!value) return '—'
+  return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })
 }
 
 function formatAmount(value) {
@@ -214,15 +202,12 @@ export default function Payments() {
       totalAmount: Number(payment.total_amount).toLocaleString(),
       orderDate: formatDate(orderDate(payment.order_id)),
       dateDelivered: isEditing ? dateField(payment) : formatDate(payment.date_delivered),
-      firstPayment: isEditing
-        ? payField(payment, 'first_payment')
-        : <PaidCell amount={formatAmount(payment.first_payment)} date={payment.first_payment_date} />,
-      secondPayment: isEditing
-        ? payField(payment, 'second_payment')
-        : <PaidCell amount={formatAmount(payment.second_payment)} date={payment.second_payment_date} />,
-      thirdPayment: isEditing
-        ? payField(payment, 'third_payment')
-        : <PaidCell amount={formatAmount(payment.third_payment)} date={payment.third_payment_date} />,
+      firstPayment: isEditing ? payField(payment, 'first_payment') : formatAmount(payment.first_payment),
+      firstPayDate: formatPayDate(payment.first_payment_date),
+      secondPayment: isEditing ? payField(payment, 'second_payment') : formatAmount(payment.second_payment),
+      secondPayDate: formatPayDate(payment.second_payment_date),
+      thirdPayment: isEditing ? payField(payment, 'third_payment') : formatAmount(payment.third_payment),
+      thirdPayDate: formatPayDate(payment.third_payment_date),
       balance: formatAmount(payment.balance),
       balanceCleared: formatDate(payment.balance_cleared_date),
       ...(isArchiveTab ? { archivedDate: formatDate(orderFor(payment.order_id)?.archived_at) } : {}),
@@ -238,8 +223,13 @@ export default function Payments() {
     ...(isArchiveTab ? [{ key: 'archivedDate', label: 'Archived Date' }] : []),
     { key: 'dateDelivered', label: 'Date Delivered' },
     { key: 'firstPayment', label: '1st Pay' },
+    // Each installment's date sits directly beside its amount — the two are set together by
+    // the server, so reading them apart would be misleading.
+    { key: 'firstPayDate', label: '1st Pay Date' },
     { key: 'secondPayment', label: '2nd Pay' },
+    { key: 'secondPayDate', label: '2nd Pay Date' },
     { key: 'thirdPayment', label: '3rd Pay' },
+    { key: 'thirdPayDate', label: '3rd Pay Date' },
     { key: 'balance', label: 'Balance' },
     { key: 'balanceCleared', label: 'Balance Cleared Date' },
   ]
