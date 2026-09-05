@@ -472,6 +472,8 @@ export default function OrderListPage({ companyId, mode }) {
       <ShareOrderOverlay
         isOpen={shareOrder !== null}
         onClose={() => setShareOrder(null)}
+        clientName={shareOrder?.client_name}
+        contactNumber={shareOrder?.contact_number}
         summaryText={
           shareOrder
             ? buildOrderSummary(shareOrder, {
