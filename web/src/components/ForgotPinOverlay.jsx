@@ -4,7 +4,10 @@ import PinInput from './PinInput.jsx'
 import { confirmPinReset, requestPinReset, verifyPinResetOtp } from '../lib/auth.js'
 import { ApiError } from '../lib/apiClient.js'
 
-const OTP_LENGTH = 6
+// Must match the OTP length configured in Supabase (Authentication -> Email provider).
+// Supabase allows 6-10; ours is 8. If you change it there, change it here or the keypad
+// submits a truncated code and every verification fails.
+const OTP_LENGTH = 8
 const PIN_LENGTH = 4
 
 function detailOf(err, fallback) {
