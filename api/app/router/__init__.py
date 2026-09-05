@@ -1,9 +1,10 @@
 from fastapi import APIRouter
 
-from app.router import analytics, attributes, auth, companies, orders, payments, shoes
+from app.router import analytics, attributes, auth, companies, devices, orders, payments, shoes
 
 api_router = APIRouter()
 api_router.include_router(auth.router)
+api_router.include_router(devices.router)
 api_router.include_router(companies.router)
 api_router.include_router(shoes.router)
 api_router.include_router(attributes.router)

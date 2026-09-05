@@ -45,6 +45,20 @@ alter table devices
     add column if not exists failed_pin_attempts integer not null default 0,
     add column if not exists pin_locked_until timestamptz;
 
+-- ── device_pairing_codes ─────────────────────────────────────────────────
+-- Short-lived single-use codes that let a new browser join the device allowlist.
+-- Issued from an already-authorized device; redeemed once by the new one.
+create table if not exists device_pairing_codes (
+    id                 uuid primary key default gen_random_uuid(),
+    code               varchar not null unique,
+    created_at         timestamptz not null default now(),
+    expires_at         timestamptz not null,
+    used_at            timestamptz,
+    used_by_device_id  uuid references devices(id)
+);
+
+create index if not exists ix_device_pairing_codes_code on device_pairing_codes(code);
+
 -- ── admin_pin ────────────────────────────────────────────────────────────
 -- Single-row table holding the shared admin PIN hash.
 create table if not exists admin_pin (

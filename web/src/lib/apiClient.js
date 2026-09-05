@@ -1,7 +1,42 @@
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
-const DEVICE_ID = import.meta.env.VITE_DEVICE_ID ?? ''
 
 const TOKEN_KEY = 'ts_admin_token'
+const DEVICE_KEY = 'ts_device_token'
+
+/** Build-time device token. This is the LEGACY mechanism: because Vite inlines VITE_* values
+ * into the public bundle, every visitor downloads the same token, so the device allowlist
+ * couldn't actually reject anyone. Devices now hold their own token in localStorage instead.
+ *
+ * It stays here only as a migration fallback so already-in-use browsers keep working until
+ * they've paired. Remove the env var from Vercel once every real device shows up under
+ * Admin -> Devices, and the allowlist becomes a genuine first factor. */
+const LEGACY_DEVICE_ID = import.meta.env.VITE_DEVICE_ID ?? ''
+
+export function getDeviceToken() {
+  try {
+    return localStorage.getItem(DEVICE_KEY) || LEGACY_DEVICE_ID
+  } catch {
+    // Private mode / blocked storage — fall back to the legacy value if there is one.
+    return LEGACY_DEVICE_ID
+  }
+}
+
+export function setDeviceToken(token) {
+  localStorage.setItem(DEVICE_KEY, token)
+}
+
+export function clearDeviceToken() {
+  localStorage.removeItem(DEVICE_KEY)
+}
+
+/** True when this browser has paired itself, as opposed to riding on the legacy bundle token. */
+export function hasPairedDevice() {
+  try {
+    return Boolean(localStorage.getItem(DEVICE_KEY))
+  } catch {
+    return false
+  }
+}
 
 export class ApiError extends Error {
   constructor(status, detail) {
@@ -52,7 +87,7 @@ export function isAuthenticated() {
 }
 
 function authHeaders(skipAuth) {
-  const headers = { 'X-Device-Id': DEVICE_ID }
+  const headers = { 'X-Device-Id': getDeviceToken() }
   if (!skipAuth) {
     const token = getToken()
     if (token) headers.Authorization = `Bearer ${token}`

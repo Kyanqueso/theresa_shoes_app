@@ -11,12 +11,14 @@ import Login from './pages/Login.jsx'
 import ManageCollection from './pages/ManageCollection.jsx'
 import ShoeDetails from './pages/ShoeDetails.jsx'
 import Forbidden from './pages/Forbidden.jsx'
+import PairDevice from './pages/PairDevice.jsx'
 import NotFound from './pages/NotFound.jsx'
 import Companies from './pages/admin/Companies.jsx'
 import Orders from './pages/admin/Orders.jsx'
 import Payments from './pages/admin/Payments.jsx'
 import CompleteOrders from './pages/admin/CompleteOrders.jsx'
 import Analytics from './pages/admin/Analytics.jsx'
+import Devices from './pages/admin/Devices.jsx'
 
 export default function App() {
   return (
@@ -41,6 +43,7 @@ export default function App() {
             <Route path="admin" element={<Navigate to="/admin/companies" replace />} />
             <Route path="admin/companies" element={<Companies />} />
             <Route path="admin/analytics" element={<Analytics />} />
+            <Route path="admin/devices" element={<Devices />} />
           </Route>
 
           <Route element={<CompanyLayout />}>
@@ -50,6 +53,7 @@ export default function App() {
           </Route>
         </Route>
 
+        <Route path="pair" element={<PairDevice />} />
         <Route path="403" element={<Forbidden />} />
         <Route path="*" element={<NotFound />} />
       </Routes>

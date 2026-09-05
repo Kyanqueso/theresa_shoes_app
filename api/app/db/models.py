@@ -55,6 +55,26 @@ class Device(Base):
     pin_locked_until = Column(DateTime(timezone=True), nullable=True)
 
 
+class DevicePairingCode(Base):
+    """Short-lived, single-use code that lets a brand-new browser register itself as a Device.
+
+    Issued from an already-authorized device (admin session required) and typed into the new
+    one. This is the only way onto the device allowlist, which is what makes the allowlist a
+    real first factor: without a code you cannot obtain a token, and without a token
+    require_valid_device rejects you before the PIN pad is ever reached.
+    """
+
+    __tablename__ = "device_pairing_codes"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    code = Column(String, nullable=False, unique=True, index=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    # Set the moment a code is redeemed, so a code can never be used twice.
+    used_at = Column(DateTime(timezone=True), nullable=True)
+    used_by_device_id = Column(UUID(as_uuid=True), ForeignKey("devices.id"), nullable=True)
+
+
 class AdminPin(Base):
     __tablename__ = "admin_pin"
 

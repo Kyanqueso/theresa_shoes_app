@@ -4,6 +4,7 @@ import LogoutButton from './LogoutButton.jsx'
 const NAV_LINKS = [
   { label: 'Clients', to: '/admin/companies' },
   { label: 'Analytics', to: '/admin/analytics' },
+  { label: 'Devices', to: '/admin/devices' },
 ]
 
 export default function AdminHeader() {
