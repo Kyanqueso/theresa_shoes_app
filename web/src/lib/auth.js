@@ -41,3 +41,11 @@ export function confirmPinReset(resetToken, pin) {
     skipAuth: true,
   })
 }
+
+/** Changes the PIN of the device making the request. Other devices keep theirs. */
+export function setDevicePin(currentPin, newPin) {
+  return apiFetch('/auth/set-pin', {
+    method: 'POST',
+    body: { current_pin: currentPin, new_pin: newPin },
+  })
+}

@@ -25,7 +25,7 @@ def issue_pairing_code(db: Session = Depends(get_db)):
 @router.post("/claim", response_model=ClaimDeviceOut, status_code=status.HTTP_201_CREATED)
 def claim_pairing_code(payload: ClaimDeviceIn, db: Session = Depends(get_db)):
     """Public by necessity — this is how an unrecognised browser gets its first token."""
-    device = device_service.claim_pairing_code(db, payload.code, payload.label)
+    device = device_service.claim_pairing_code(db, payload.code, payload.label, payload.pin)
     return ClaimDeviceOut(device_token=device.device_token, label=device.label)
 
 
@@ -35,6 +35,7 @@ def list_devices(current_device: Device = Depends(require_admin_session), db: Se
     for device in device_service.list_devices(db):
         out = DeviceOut.model_validate(device)
         out.is_current = device.id == current_device.id
+        out.has_own_pin = device.pin_hash is not None
         devices.append(out)
     return devices
 

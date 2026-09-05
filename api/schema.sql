@@ -36,6 +36,8 @@ create table if not exists devices (
     is_active             boolean not null default true,
     created_at            timestamptz not null default now(),
     last_seen_at          timestamptz,
+    -- This device's own PIN hash. Null = falls back to the shared admin_pin row.
+    pin_hash              varchar,
     -- PIN brute-force protection: 10 wrong PINs from this device locks it out for 30 minutes.
     failed_pin_attempts   integer not null default 0,
     pin_locked_until      timestamptz
@@ -43,7 +45,8 @@ create table if not exists devices (
 
 alter table devices
     add column if not exists failed_pin_attempts integer not null default 0,
-    add column if not exists pin_locked_until timestamptz;
+    add column if not exists pin_locked_until timestamptz,
+    add column if not exists pin_hash varchar;
 
 -- ── device_pairing_codes ─────────────────────────────────────────────────
 -- Short-lived single-use codes that let a new browser join the device allowlist.
@@ -64,7 +67,9 @@ alter table device_pairing_codes add column if not exists last_attempt_at timest
 create index if not exists ix_device_pairing_codes_code on device_pairing_codes(code);
 
 -- ── admin_pin ────────────────────────────────────────────────────────────
--- Single-row table holding the shared admin PIN hash.
+-- Legacy single-row shared PIN. Each device now carries its own devices.pin_hash; this row
+-- only still serves devices paired before that change. Once every row in `devices` has a
+-- pin_hash, this table can be dropped.
 create table if not exists admin_pin (
     id            integer primary key,
     pin_hash      varchar not null,

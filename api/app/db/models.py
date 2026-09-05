@@ -50,6 +50,10 @@ class Device(Base):
     is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     last_seen_at = Column(DateTime(timezone=True), nullable=True)
+    # This device's own PIN. Null means the device predates per-device PINs and still falls
+    # back to the shared admin_pin row (see auth_service.verify_admin_pin) — that fallback is
+    # what stops the migration locking out devices that were paired before this existed.
+    pin_hash = Column(String, nullable=True)
     # PIN brute-force protection: 10 wrong PINs from this device locks it out for 30 minutes.
     failed_pin_attempts = Column(Integer, nullable=False, default=0)
     pin_locked_until = Column(DateTime(timezone=True), nullable=True)

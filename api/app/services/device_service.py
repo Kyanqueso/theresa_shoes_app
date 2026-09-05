@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.config.auth import hash_pin
 from app.db.models import Device, DevicePairingCode
 
 # 6 digits keeps the code readable and typeable on a phone by someone who isn't
@@ -40,7 +41,7 @@ def create_pairing_code(db: Session) -> DevicePairingCode:
     return record
 
 
-def claim_pairing_code(db: Session, code: str, label: str | None) -> Device:
+def claim_pairing_code(db: Session, code: str, label: str | None, pin: str) -> Device:
     """Redeems a code and returns the newly created Device, whose token the caller stores.
 
     Deliberately reachable without a device header — a device being paired has no token yet,
@@ -85,7 +86,13 @@ def claim_pairing_code(db: Session, code: str, label: str | None) -> Device:
             detail="That pairing code is invalid, already used, or has expired.",
         )
 
-    device = Device(device_token=str(uuid.uuid4()), label=(label or "").strip() or "New device")
+    # The PIN is set here, in the same transaction as the device row, so a device can never
+    # exist in a half-paired state with no way to authenticate.
+    device = Device(
+        device_token=str(uuid.uuid4()),
+        label=(label or "").strip() or "New device",
+        pin_hash=hash_pin(pin),
+    )
     db.add(device)
     db.flush()
 

@@ -48,6 +48,10 @@ class ClaimDeviceIn(BaseModel):
     code: str
     # Shown in the admin device list so the owner can tell one device from another.
     label: str | None = Field(default=None, max_length=50)
+    # Set in the same request as the claim. It has to happen here: a freshly paired device
+    # has no session yet, so it cannot reach any endpoint that requires one, and asking for
+    # the PIN afterwards would leave it stranded.
+    pin: str = Field(min_length=4, max_length=4, pattern=r"^\d{4}$")
 
 
 class ClaimDeviceOut(BaseModel):
@@ -55,6 +59,13 @@ class ClaimDeviceOut(BaseModel):
 
     device_token: str
     label: str | None = None
+
+
+class SetPinIn(BaseModel):
+    """Changing the PIN of the device making the request."""
+
+    current_pin: str
+    new_pin: str = Field(min_length=4, max_length=4, pattern=r"^\d{4}$")
 
 
 class DeviceOut(BaseModel):
@@ -69,6 +80,9 @@ class DeviceOut(BaseModel):
     # every device's token to the browser would let anyone with an admin session collect them
     # and impersonate those devices, so the server flags the current one instead.
     is_current: bool = False
+    # False means this device predates per-device PINs and still uses the shared one. The
+    # hash itself is never sent, only whether there is one.
+    has_own_pin: bool = False
 
 
 class DeviceUpdate(BaseModel):

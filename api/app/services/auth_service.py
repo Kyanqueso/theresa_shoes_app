@@ -30,8 +30,15 @@ def verify_admin_pin(db: Session, device: Device, pin: str) -> str | None:
             f"{'s' if remaining_minutes != 1 else ''}.",
         )
 
-    record = db.query(AdminPin).first()
-    if record is None or not verify_pin(pin, record.pin_hash):
+    # Each device carries its own PIN. Devices paired before that existed have a null
+    # pin_hash and fall back to the legacy shared admin_pin row, so this change never locks
+    # anyone out — they keep using the old PIN until they set one of their own.
+    expected_hash = device.pin_hash
+    if expected_hash is None:
+        shared = db.query(AdminPin).first()
+        expected_hash = shared.pin_hash if shared is not None else None
+
+    if expected_hash is None or not verify_pin(pin, expected_hash):
         device.failed_pin_attempts += 1
         if device.failed_pin_attempts >= PIN_MAX_ATTEMPTS:
             device.pin_locked_until = now + timedelta(minutes=PIN_LOCKOUT_MINUTES)
@@ -84,9 +91,30 @@ def verify_pin_reset_otp(email: str, otp: str) -> str | None:
     return create_reset_token()
 
 
-def confirm_pin_reset(db: Session, reset_token: str, pin: str) -> None:
-    """Raises HTTPException if the ticket is missing/expired/wrong-purpose, or the PIN isn't 4 digits."""
-    decode_reset_token(reset_token)
+def _validate_pin_format(pin: str) -> None:
     if not (pin.isdigit() and len(pin) == 4):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="PIN must be 4 digits.")
-    set_admin_pin(db, pin)
+
+
+def set_device_pin(db: Session, device: Device, pin: str) -> None:
+    """Sets (or replaces) the PIN for one device only. Every other device keeps its own.
+
+    Also clears the lockout: a device that just proved itself — by redeeming a pairing code
+    or completing the email OTP — shouldn't stay locked out from earlier wrong guesses.
+    """
+    _validate_pin_format(pin)
+    device.pin_hash = hash_pin(pin)
+    device.failed_pin_attempts = 0
+    device.pin_locked_until = None
+    db.commit()
+
+
+def confirm_pin_reset(db: Session, device: Device, reset_token: str, pin: str) -> None:
+    """Completes the forgot-PIN flow for the device that asked, and only that device.
+
+    Raises HTTPException if the ticket is missing/expired/wrong-purpose, or the PIN isn't
+    4 digits. The OTP proves control of the admin mailbox and the device is already on the
+    allowlist, so resetting its own PIN is the whole of what this grants.
+    """
+    decode_reset_token(reset_token)
+    set_device_pin(db, device, pin)

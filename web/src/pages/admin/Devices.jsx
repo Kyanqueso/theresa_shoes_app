@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Ban, CheckCircle2, Plus, Smartphone, Trash2 } from 'lucide-react'
+import { Ban, CheckCircle2, KeyRound, Plus, Smartphone, Trash2 } from 'lucide-react'
 import EmptyState from '../../components/EmptyState.jsx'
 import ConfirmButton from '../../components/ConfirmButton.jsx'
 import LoadingSpinner from '../../components/LoadingSpinner.jsx'
 import Modal from '../../components/manage/Modal.jsx'
 import { deleteDevice, issuePairingCode, listDevices, updateDevice } from '../../lib/devicesApi.js'
+import PinInput from '../../components/PinInput.jsx'
+import { setDevicePin } from '../../lib/auth.js'
 import { errorDetail, hasPairedDevice } from '../../lib/apiClient.js'
 
 function formatDate(value) {
@@ -60,12 +62,95 @@ function PairingCodeModal({ isOpen, onClose, code, expiresAt, error, isLoading }
   )
 }
 
+/** Changes the PIN of the device you're sitting at. The current PIN is asked for again even
+ * though a session is already open — otherwise anyone who found an unlocked screen could
+ * lock the real owner out of their own device. */
+function ChangePinModal({ isOpen, onClose }) {
+  const [stage, setStage] = useState('current') // current | next | done
+  const [currentPin, setCurrentPin] = useState('')
+  const [error, setError] = useState(null)
+  const [isSaving, setIsSaving] = useState(false)
+  const [resetKey, setResetKey] = useState(0)
+
+  const restart = () => {
+    setStage('current')
+    setCurrentPin('')
+    setError(null)
+    setResetKey((k) => k + 1)
+  }
+
+  const handleCurrent = (pin) => {
+    setCurrentPin(pin)
+    setError(null)
+    setStage('next')
+    setResetKey((k) => k + 1)
+  }
+
+  const handleNext = async (pin) => {
+    setIsSaving(true)
+    setError(null)
+    try {
+      await setDevicePin(currentPin, pin)
+      setStage('done')
+    } catch (err) {
+      setError(errorDetail(err, 'Could not change the PIN. Please try again.'))
+      restart()
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const close = () => {
+    restart()
+    onClose()
+  }
+
+  return (
+    <Modal isOpen={isOpen} onClose={close} title="Change this device's PIN">
+      <div className="flex flex-col items-center text-center">
+        {stage === 'done' ? (
+          <>
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-success text-white">
+              <CheckCircle2 size={24} />
+            </div>
+            <p className="mt-4 text-sm font-semibold text-black">PIN updated for this device.</p>
+            <button
+              type="button"
+              onClick={close}
+              className="mt-5 rounded-lg bg-primary px-6 py-2 text-sm font-semibold text-white"
+            >
+              Done
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-gray-600">
+              {stage === 'current' ? 'Enter your current PIN.' : 'Enter the new 4-digit PIN.'}
+            </p>
+            {error && <p className="mt-3 text-sm font-semibold text-danger">{error}</p>}
+            <div className="mt-4">
+              <PinInput
+                key={`${stage}-${resetKey}`}
+                length={4}
+                onComplete={stage === 'current' ? handleCurrent : handleNext}
+                disabled={isSaving}
+              />
+            </div>
+            {isSaving && <p className="mt-3 text-sm text-gray-600">Saving…</p>}
+          </>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
 export default function Devices() {
   const [devices, setDevices] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
   const [isAdding, setIsAdding] = useState(false)
   const [pairing, setPairing] = useState({ code: null, expiresAt: null, error: null, isLoading: false })
+  const [isChangingPin, setIsChangingPin] = useState(false)
 
   const refresh = (isCancelled = () => false) => {
     listDevices()
@@ -130,19 +215,29 @@ export default function Devices() {
     <div className="mx-auto max-w-7xl px-6 py-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold text-black">Devices</h1>
-        <button
-          type="button"
-          onClick={handleAddDevice}
-          className="flex items-center justify-center gap-2 self-start rounded-lg bg-success px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 sm:self-auto"
-        >
-          <Plus size={16} />
-          Add Device
-        </button>
+        <div className="flex flex-wrap gap-2 self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={() => setIsChangingPin(true)}
+            className="flex items-center justify-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:text-black"
+          >
+            <KeyRound size={16} />
+            Change my PIN
+          </button>
+          <button
+            type="button"
+            onClick={handleAddDevice}
+            className="flex items-center justify-center gap-2 rounded-lg bg-success px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+          >
+            <Plus size={16} />
+            Add Device
+          </button>
+        </div>
       </div>
 
       <p className="mt-2 max-w-2xl text-sm text-gray-600">
-        Only devices on this list can reach the admin PIN screen. Everything else is blocked before
-        the PIN is ever shown.
+        Only devices on this list can reach the admin PIN screen, and each one has its own PIN.
+        Blocking a device cuts it off without changing anyone else&apos;s PIN.
       </p>
 
       {!hasPairedDevice() && (
@@ -185,13 +280,23 @@ export default function Devices() {
                       <p className="mt-1 text-xs text-gray-500">Added {formatDate(device.created_at)}</p>
                       <p className="text-xs text-gray-500">Last seen {formatDate(device.last_seen_at)}</p>
                     </div>
-                    <span
-                      className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${
-                        device.is_active ? 'bg-success/20 text-success' : 'bg-danger/15 text-danger'
-                      }`}
-                    >
-                      {device.is_active ? 'Active' : 'Blocked'}
-                    </span>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                          device.is_active ? 'bg-success/20 text-success' : 'bg-danger/15 text-danger'
+                        }`}
+                      >
+                        {device.is_active ? 'Active' : 'Blocked'}
+                      </span>
+                      {!device.has_own_pin && (
+                        <span
+                          title="Paired before per-device PINs existed — still uses the old shared PIN."
+                          className="rounded-full bg-golden-brown/15 px-2.5 py-1 text-[10px] font-semibold text-golden-brown"
+                        >
+                          SHARED PIN
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <div className="mt-4 flex gap-2">
@@ -227,6 +332,8 @@ export default function Devices() {
           </div>
         )}
       </div>
+
+      <ChangePinModal isOpen={isChangingPin} onClose={() => { setIsChangingPin(false); refresh() }} />
 
       <PairingCodeModal
         isOpen={isAdding}

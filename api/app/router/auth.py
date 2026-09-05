@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.config.auth import require_valid_device
 from app.db.base import get_db
 from app.db.models import Device
+from app.config.auth import require_admin_session
 from app.schema.auth import (
     DeviceCheckResponse,
     ForgotPinConfirmIn,
@@ -12,6 +13,7 @@ from app.schema.auth import (
     ForgotPinVerifyOut,
     MessageResponse,
     PinVerifyRequest,
+    SetPinIn,
     TokenResponse,
 )
 from app.services import auth_service
@@ -66,5 +68,21 @@ def forgot_pin_confirm(
     device: Device = Depends(require_valid_device),
     db: Session = Depends(get_db),
 ):
-    auth_service.confirm_pin_reset(db, payload.reset_token, payload.pin)
-    return MessageResponse(message="PIN updated.")
+    """Resets the PIN of the device making the request — not every device."""
+    auth_service.confirm_pin_reset(db, device, payload.reset_token, payload.pin)
+    return MessageResponse(message="PIN updated for this device.")
+
+
+@router.post("/set-pin", response_model=MessageResponse)
+def set_pin(
+    payload: SetPinIn,
+    device: Device = Depends(require_admin_session),
+    db: Session = Depends(get_db),
+):
+    """Changes this device's PIN while signed in. The current PIN is re-checked even though
+    a valid session is already present, so someone who walks up to an unlocked screen can't
+    silently take the device over."""
+    if auth_service.verify_admin_pin(db, device, payload.current_pin) is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Current PIN is incorrect.")
+    auth_service.set_device_pin(db, device, payload.new_pin)
+    return MessageResponse(message="PIN updated for this device.")

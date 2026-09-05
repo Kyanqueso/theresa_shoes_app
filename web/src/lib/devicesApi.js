@@ -8,10 +8,10 @@ export function issuePairingCode() {
 /** Redeems a code and stores the returned token for this browser.
  * skipAuth because a device being paired has no token or session yet — this is the one
  * call that has to work from an unrecognised browser. */
-export async function claimPairingCode(code, label) {
+export async function claimPairingCode(code, label, pin) {
   const result = await apiFetch('/auth/devices/claim', {
     method: 'POST',
-    body: { code: code.trim(), label: label?.trim() || null },
+    body: { code: code.trim(), label: label?.trim() || null, pin },
     skipAuth: true,
   })
   setDeviceToken(result.device_token)
