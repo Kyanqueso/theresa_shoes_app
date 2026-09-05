@@ -660,7 +660,7 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
-              <label className="text-sm font-semibold text-black">Enter Name</label>
+              <label className="text-sm font-semibold text-black">Client Name</label>
               <input
                 type="text"
                 value={clientName}
