@@ -4,7 +4,7 @@ import contactBg from '../../assets/images/contact-bg.jpg'
 import bdoLogo from '../../assets/images/bdo-logo-img.png'
 import gcashLogo from '../../assets/images/gcash-logo-img.png'
 import { isDemoMode } from '../../lib/demoMode.js'
-import { OWNER_VIBER_NUMBER } from '../../lib/businessContact.js'
+import { ownerViberChatUrl } from '../../lib/businessContact.js'
 
 const VIBER_INSTALL_URL = 'https://www.viber.com/en/download/'
 
@@ -63,7 +63,7 @@ export default function Contact() {
 
     const iframe = document.createElement('iframe')
     iframe.style.display = 'none'
-    iframe.src = `viber://chat?number=${encodeURIComponent(OWNER_VIBER_NUMBER)}`
+    iframe.src = ownerViberChatUrl()
     document.body.appendChild(iframe)
     const removeIframeTimer = setTimeout(() => iframe.remove(), 2000)
 

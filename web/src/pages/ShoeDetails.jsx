@@ -19,10 +19,11 @@ import { createOrder, uploadNotesImage } from '../lib/ordersApi.js'
 import { ApiError } from '../lib/apiClient.js'
 import { sanitizeText } from '../lib/textInput.js'
 import { isDeviceRecognized, verifyPin } from '../lib/auth.js'
-import { OWNER_VIBER_NUMBER } from '../lib/businessContact.js'
+import { ownerViberChatUrl } from '../lib/businessContact.js'
 import { findCloseMatchingCompany } from '../lib/companySimilarity.js'
 
-const NUMBER_OPTIONS = [1, 2, 3, 4, 5]
+// Heel sizes offered in the dropdown.
+const HEEL_SIZE_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9]
 const POST_ORDER_COOLDOWN_MS = 30_000
 
 function PillGroup({ label, options, value, onChange, onPreview }) {
@@ -89,7 +90,7 @@ function NumberSelect({ label, value, onChange }) {
         onChange={(event) => onChange(Number(event.target.value))}
         className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30"
       >
-        {NUMBER_OPTIONS.map((option) => (
+        {HEEL_SIZE_OPTIONS.map((option) => (
           <option key={option} value={option}>
             {option}
           </option>
@@ -99,7 +100,10 @@ function NumberSelect({ label, value, onChange }) {
   )
 }
 
-function NumberInput({ label, value, onChange, min = 1, max }) {
+/** Starts empty rather than pre-filled with the minimum: a default "1" has to be deleted
+ * before a real value can be typed, on every order. The empty string is kept in state while
+ * typing and only clamped on blur, so intermediate values aren't fought with mid-keystroke. */
+function NumberInput({ label, value, onChange, min = 1, max, placeholder }) {
   return (
     <div>
       <label className="text-sm font-semibold text-black">{label}</label>
@@ -108,9 +112,12 @@ function NumberInput({ label, value, onChange, min = 1, max }) {
         min={min}
         max={max}
         value={value}
-        onChange={(event) => {
-          const clamped = Math.min(max ?? Infinity, Math.max(min, Number(event.target.value) || min))
-          onChange(clamped)
+        placeholder={placeholder}
+        onChange={(event) => onChange(event.target.value)}
+        onBlur={(event) => {
+          const raw = event.target.value
+          if (raw === '') return
+          onChange(String(Math.min(max ?? Infinity, Math.max(min, Number(raw) || min))))
         }}
         className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30"
       />
@@ -178,9 +185,10 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
   const [colorCode, setColorCode] = useState('')
   const [moldTypeChoice, setMoldType] = useState(null)
   const [heelType, setHeelType] = useState(null)
-  const [size, setSize] = useState(1)
+  // Empty strings, not 1 — see NumberInput. Converted to numbers at submit time.
+  const [size, setSize] = useState('')
   const [heelSize, setHeelSize] = useState(1)
-  const [quantity, setQuantity] = useState(1)
+  const [quantity, setQuantity] = useState('')
   const [withBuckle, setWithBuckle] = useState('No')
   const [buckleVariant, setBuckleVariant] = useState(null)
   const [withFlatform, setWithFlatform] = useState('No')
@@ -298,9 +306,14 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
     return result
   }
 
+  const sizeValue = Number(size)
+  const quantityValue = Number(quantity)
+
   const isFormComplete =
     materialGroup !== null &&
     colorCode.trim() !== '' &&
+    sizeValue >= 1 &&
+    quantityValue >= 1 &&
     moldType !== null &&
     heelType !== null &&
     clientName.trim() !== '' &&
@@ -334,9 +347,9 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
         mold_type_id: moldType,
         heel_type_id: heelType,
         color_code: colorCode.trim() || null,
-        size,
+        size: sizeValue,
         heel_size: heelSize,
-        quantity,
+        quantity: quantityValue,
         with_buckle: withBuckle === 'Yes',
         buckle_id: withBuckle === 'Yes' ? buckleVariant : null,
         with_flatform: withFlatform === 'Yes',
@@ -390,14 +403,14 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
       `Buckle: ${withBuckle}`,
       `Flatform: ${withFlatform}`,
       `Slingback: ${withSlingback}`,
-      `Size: ${size}`,
+      `Size: ${sizeValue}`,
       `Heel Size: ${heelSize}`,
-      `Quantity: ${quantity}`,
+      `Quantity: ${quantityValue}`,
       noteText && `Notes: ${noteText}`,
       `Name: ${clientName}`,
       companyName && `Company: ${companyName}`,
       contactNumber !== CONTACT_PREFIX && `Contact #: ${contactNumber}`,
-      `Total: ₱${(shoe.price * quantity).toLocaleString()}`,
+      `Total: ₱${(shoe.price * quantityValue).toLocaleString()}`,
     ].filter(Boolean)
     return lines.join('\n')
   }
@@ -437,7 +450,7 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
     } catch {
       // clipboard access can fail (e.g. insecure context) - the chat still opens, just unpasted
     }
-    window.open(`viber://chat?number=${encodeURIComponent(OWNER_VIBER_NUMBER)}`, '_blank', 'noopener,noreferrer')
+    window.open(ownerViberChatUrl(), '_blank', 'noopener,noreferrer')
   }
 
   const handleManageClick = async (target) => {
@@ -571,9 +584,9 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
           />
 
           <div className="grid grid-cols-3 gap-4">
-            <NumberInput label="Size" value={size} onChange={setSize} min={1} max={125} />
+            <NumberInput label="Size" value={size} onChange={setSize} min={1} max={125} placeholder="e.g. 36" />
             <NumberSelect label="Heel Size" value={heelSize} onChange={setHeelSize} />
-            <NumberInput label="Quantity" value={quantity} onChange={setQuantity} min={1} max={100} />
+            <NumberInput label="Quantity" value={quantity} onChange={setQuantity} min={1} max={100} placeholder="e.g. 1" />
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -709,9 +722,9 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
         withBuckle={withBuckle}
         withFlatform={withFlatform}
         withSlingback={withSlingback}
-        size={size}
+        size={sizeValue}
         heelSize={heelSize}
-        quantity={quantity}
+        quantity={quantityValue}
         notesBlocks={isReviewOpen ? buildPreviewBlocks() : []}
         clientName={clientName}
         companyName={companyName}

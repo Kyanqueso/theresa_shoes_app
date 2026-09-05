@@ -72,6 +72,10 @@ export default function OrderListPage({ companyId, mode }) {
   const [notesOrder, setNotesOrder] = useState(null)
   const [isAddOpen, setIsAddOpen] = useState(false)
 
+  // Declared before refresh() and the effect below, both of which read it. Leaving it
+  // further down puts it in the temporal dead zone when the dependency array is evaluated.
+  const isArchiveTab = activeTab === 'archive'
+
   const refresh = (isCancelled = () => false) => {
     // Server-side filtering/paging: only this page's rows come down the wire.
     const query = {
@@ -124,8 +128,6 @@ export default function OrderListPage({ companyId, mode }) {
     (order.shoe_id ? shoes.find((shoe) => shoe.id === order.shoe_id)?.name : order.custom_model_name) ?? '—'
   const optionName = (category, id) =>
     (attributeOptions[category] ?? []).find((option) => option.id === id)?.name ?? '—'
-
-  const isArchiveTab = activeTab === 'archive'
 
   // Postgres already filtered, searched, sorted and sliced — these rows are the page.
   const pageItems = orders
