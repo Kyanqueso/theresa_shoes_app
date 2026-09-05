@@ -85,6 +85,29 @@ def _validate_payment_amounts(payment: Payment) -> None:
             detail=f"Payments total ₱{paid:,.2f} but the order is only ₱{total:,.2f} — that's ₱{over:,.2f} too much.",
         )
 
+    # The 3rd instalment is the final one: recording it settles the order, so it has to be
+    # exactly what's left. The figure is checked rather than corrected — the amount on record
+    # must be the amount actually handed over, not something the system decided.
+    if third > 0:
+        remaining = total - first - second
+        if remaining <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This order is already fully paid by the 1st and 2nd payments — no 3rd payment is needed.",
+            )
+        if third != remaining:
+            short_by = remaining - third
+            wording = (
+                f"₱{short_by:,.2f} short" if short_by > 0 else f"₱{-short_by:,.2f} over"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"The 3rd payment must settle the order exactly: ₱{remaining:,.2f} is still owed, "
+                    f"but ₱{third:,.2f} was entered ({wording})."
+                ),
+            )
+
 
 def _sync_order_completion(payment: Payment) -> None:
     """An order is considered complete once it's both delivered and fully paid — there's no

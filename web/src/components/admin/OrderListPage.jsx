@@ -50,6 +50,9 @@ function buildOrderSummary(order, { companyName, shoeName, materialName, moldNam
 /** Shared table for both the Orders page (current/archived tabs) and Complete Orders (fixed, no tabs). */
 export default function OrderListPage({ companyId, mode }) {
   const [companyName, setCompanyName] = useState('')
+  // Orders under an archived company can't be restored on their own — the server rejects it,
+  // so the button is hidden rather than offered and then refused.
+  const [isCompanyArchived, setIsCompanyArchived] = useState(false)
   const [orders, setOrders] = useState([])
   const [shoes, setShoes] = useState([])
   const [attributeOptions, setAttributeOptions] = useState({})
@@ -117,6 +120,7 @@ export default function OrderListPage({ companyId, mode }) {
         setCompanies(companiesData)
         const company = companiesData.find((item) => item.id === companyId)
         setCompanyName(company?.name ?? 'Company')
+        setIsCompanyArchived(company?.status === 'archive')
         setLoadError(null)
       })
       .catch(() => {
@@ -373,12 +377,14 @@ export default function OrderListPage({ companyId, mode }) {
     ),
     actions: isEditing ? null : isArchiveTab ? (
       <div className="flex items-center gap-1.5">
-        <ConfirmButton
-          label="Restore"
-          question={`Restore ${order.client_name}'s order?`}
-          onConfirm={() => handleRestore(order)}
-          triggerClassName="rounded-lg bg-golden-brown px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90"
-        />
+        {!isCompanyArchived && (
+          <ConfirmButton
+            label="Restore"
+            question={`Restore ${order.client_name}'s order?`}
+            onConfirm={() => handleRestore(order)}
+            triggerClassName="rounded-lg bg-golden-brown px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90"
+          />
+        )}
         <ConfirmButton
           label=""
           icon={Trash2}
@@ -466,6 +472,13 @@ export default function OrderListPage({ companyId, mode }) {
         onCancelEdits={handleCancelEdits}
         isSavingEdits={isSavingEdits}
       />
+
+      {isArchiveTab && isCompanyArchived && (
+        <p className="mt-4 rounded-lg bg-golden-brown/10 px-4 py-3 text-sm text-golden-brown">
+          {companyName} is archived, so these orders were archived with it and can&apos;t be restored
+          individually. Restore the company from the Clients page and its orders come back too.
+        </p>
+      )}
 
       {isEditing && isCompletedView && (
         <p className="mt-4 rounded-lg bg-golden-brown/10 px-4 py-3 text-sm text-golden-brown">

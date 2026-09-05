@@ -173,16 +173,34 @@ export default function Payments() {
     />
   )
 
-  const payField = (payment, field) => (
-    <input
-      type="number"
-      min={0}
-      step="0.01"
-      value={drafts[payment.id]?.[field] ?? 0}
-      onChange={(event) => updateDraft(payment.id, field, event.target.value)}
-      className={`${inputClass} w-20`}
-    />
-  )
+  /** What a 3rd payment has to be: the order total less the first two instalments, taken
+   * from the draft so it tracks what's being typed rather than what's saved. */
+  const remainingForThird = (payment) => {
+    const draft = drafts[payment.id]
+    if (!draft) return null
+    const remaining =
+      Number(payment.total_amount) - (Number(draft.first_payment) || 0) - (Number(draft.second_payment) || 0)
+    return remaining > 0 ? remaining : null
+  }
+
+  const payField = (payment, field) => {
+    // The 3rd instalment settles the order, so the amount is checked against what's still
+    // owed. Shown as a placeholder rather than filled in — the figure on record has to be
+    // the amount actually handed over, typed by whoever took it.
+    const required = field === 'third_payment' ? remainingForThird(payment) : null
+    return (
+      <input
+        type="number"
+        min={0}
+        step="0.01"
+        value={drafts[payment.id]?.[field] ?? 0}
+        placeholder={required != null ? String(required) : undefined}
+        title={required != null ? `Must be exactly ${formatAmount(required)} to settle this order` : undefined}
+        onChange={(event) => updateDraft(payment.id, field, event.target.value)}
+        className={`${inputClass} w-20`}
+      />
+    )
+  }
 
   const rows = pageItems.map((payment) => {
     const isDelivered = Boolean(payment.date_delivered)
@@ -255,6 +273,13 @@ export default function Payments() {
           </div>
         ))}
       </div>
+
+      {isEditing && (
+        <p className="mt-4 rounded-lg bg-golden-brown/10 px-4 py-3 text-sm text-golden-brown">
+          A 3rd payment settles the order, so it must be entered as exactly the amount still
+          owed. Hover the 3rd Pay box to see that figure.
+        </p>
+      )}
 
       <ErrorBanner message={actionError} onDismiss={() => setActionError(null)} />
 

@@ -2,11 +2,12 @@ import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 
+from fastapi import HTTPException, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.config.timezone import business_today
-from app.db.models import Order, OrderStatus, Payment
+from app.db.models import CompanyStatus, Order, OrderStatus, Payment
 from app.schema.order import OrderCreate, OrderUpdate
 from app.services import company_service, image_service, payment_service
 
@@ -135,6 +136,24 @@ def update_order(db: Session, order_id: uuid.UUID, data: OrderUpdate) -> Order |
     changes = data.model_dump(exclude_unset=True)
     if "status" in changes:
         new_status = changes["status"]
+
+        # An order can't be brought back while the company it belongs to is archived — that
+        # would leave a live order filed under a company the shop has put away, invisible on
+        # the active Companies list but still counted in orders and analytics. Restoring the
+        # company itself is what brings its orders back (see company_service's cascade).
+        if (
+            order.status == OrderStatus.archived
+            and new_status != OrderStatus.archived
+            and order.company is not None
+            and order.company.status == CompanyStatus.archive
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f'"{order.company.name}" is archived, so its orders can\'t be restored '
+                    f"individually. Restore the company first and its orders come back with it."
+                ),
+            )
         # Based on completed_at/archived_at themselves (not the current status) so that
         # restoring an archived order back to "completed" preserves its original
         # completion time instead of resetting it to now.
