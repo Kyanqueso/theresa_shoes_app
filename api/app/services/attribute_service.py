@@ -1,10 +1,32 @@
 import uuid
 
+from fastapi import HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.models import AttributeCategory, ShoeAttributeOption
 from app.schema.attribute import AttributeOptionCreate, AttributeOptionUpdate
 from app.services import image_service
+
+# Human-readable labels for the 409 message — "A buckle named X already exists" reads better
+# than the raw category enum, and swatches aren't a category at all (they're parented materials).
+_CATEGORY_LABELS = {
+    AttributeCategory.material: "material",
+    AttributeCategory.mold_type: "mold type",
+    AttributeCategory.heel_type: "heel type",
+    AttributeCategory.buckle: "buckle",
+    AttributeCategory.slingback: "slingback",
+    AttributeCategory.flatform: "flatform",
+}
+
+
+def _duplicate_name_error(name: str, category: AttributeCategory, is_swatch: bool) -> HTTPException:
+    label = "swatch" if is_swatch else _CATEGORY_LABELS.get(category, "option")
+    scope = " in this material" if is_swatch else ""
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=f'A {label} named "{name}" already exists{scope}.',
+    )
 
 
 def list_attribute_options(db: Session, category: AttributeCategory | None = None) -> list[ShoeAttributeOption]:
@@ -21,7 +43,11 @@ def get_attribute_option(db: Session, option_id: uuid.UUID) -> ShoeAttributeOpti
 def create_attribute_option(db: Session, data: AttributeOptionCreate) -> ShoeAttributeOption:
     option = ShoeAttributeOption(**data.model_dump())
     db.add(option)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise _duplicate_name_error(data.name, data.category, data.parent_id is not None) from exc
     db.refresh(option)
     return option
 
@@ -32,9 +58,15 @@ def update_attribute_option(
     option = get_attribute_option(db, option_id)
     if option is None:
         return None
-    for field, value in data.model_dump(exclude_unset=True).items():
+    changes = data.model_dump(exclude_unset=True)
+    category, parent_id = option.category, option.parent_id
+    for field, value in changes.items():
         setattr(option, field, value)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise _duplicate_name_error(changes.get("name", ""), category, parent_id is not None) from exc
     db.refresh(option)
     return option
 

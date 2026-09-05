@@ -98,6 +98,10 @@ class Shoe(Base):
     )
     orders = relationship("Order", back_populates="shoe")
 
+    # Case-insensitive name uniqueness, mirroring Company. Two shoes with the same name are
+    # indistinguishable in the manual-order form's model dropdown.
+    __table_args__ = (Index("ix_shoes_name_lower", func.lower(name), unique=True),)
+
 
 class ShoeImage(Base):
     __tablename__ = "shoe_images"
@@ -123,6 +127,23 @@ class ShoeAttributeOption(Base):
         UUID(as_uuid=True), ForeignKey("shoe_attribute_options.id", ondelete="CASCADE"), nullable=True
     )
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    # Case-insensitive name uniqueness scoped to (category, parent).
+    # nulls_not_distinct is the part that matters for material *groups* — their parent_id is
+    # null, and Postgres treats nulls as distinct by default, so without it two groups both
+    # named "Snake" would still be allowed. Scoping by parent keeps the same swatch name legal
+    # under two different materials (Helga/Red and Snake/Red); only a clash inside one group
+    # is rejected. Requires Postgres 15+.
+    __table_args__ = (
+        Index(
+            "ix_attribute_options_unique_name",
+            category,
+            func.lower(name),
+            parent_id,
+            unique=True,
+            postgresql_nulls_not_distinct=True,
+        ),
+    )
 
 
 class Order(Base):

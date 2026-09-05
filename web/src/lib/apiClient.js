@@ -11,6 +11,14 @@ export class ApiError extends Error {
   }
 }
 
+/** Pulls a displayable message out of a thrown error.
+ * FastAPI validation errors (422) return `detail` as an array of objects, not a string —
+ * rendering that straight into JSX would crash, so only ever use it when it's really a string.
+ * Everything else (409 duplicate-name conflicts, 404s, ...) sends a plain string we can show. */
+export function errorDetail(err, fallback) {
+  return err instanceof ApiError && typeof err.detail === 'string' ? err.detail : fallback
+}
+
 export function getToken() {
   const token = localStorage.getItem(TOKEN_KEY)
   if (!token) return null

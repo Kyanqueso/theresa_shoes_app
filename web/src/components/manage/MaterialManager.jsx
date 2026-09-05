@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ChevronDown, ChevronRight, Layers, Plus, Search, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Layers, Pencil, Plus, Search, Trash2, Undo2 } from 'lucide-react'
 import EmptyState from '../EmptyState.jsx'
 import ConfirmButton from '../ConfirmButton.jsx'
 import LoadingSpinner from '../LoadingSpinner.jsx'
@@ -14,9 +14,12 @@ import {
   uploadAttributeImage,
 } from '../../lib/attributesApi.js'
 import { sanitizeText } from '../../lib/textInput.js'
+import { errorDetail } from '../../lib/apiClient.js'
 
-function AddMaterialForm({ onCancel, onSave, saving, error }) {
-  const [name, setName] = useState('')
+/** Used for both adding a material group and renaming an existing one — `initial` decides which. */
+function MaterialForm({ initial, onCancel, onSave, saving, error }) {
+  const [name, setName] = useState(initial?.name ?? '')
+  const isEdit = Boolean(initial)
 
   return (
     <div className="flex flex-col gap-4 text-left">
@@ -39,11 +42,11 @@ function AddMaterialForm({ onCancel, onSave, saving, error }) {
         </button>
         <button
           type="button"
-          disabled={!name.trim() || saving}
+          disabled={!name.trim() || saving || (isEdit && name.trim() === initial.name)}
           onClick={() => onSave(name.trim())}
           className="rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
         >
-          {saving ? 'Saving…' : 'Add'}
+          {saving ? 'Saving…' : isEdit ? 'Save' : 'Add'}
         </button>
       </div>
     </div>
@@ -122,7 +125,7 @@ function AddSwatchForm({ onCancel, onSave, saving, error }) {
   )
 }
 
-function SwatchCard({ swatch, onDelete, onDragStart }) {
+function SwatchCard({ swatch, onDelete, onDragStart, onToggle }) {
   const outOfStock = !swatch.is_active
   return (
     <div
@@ -145,6 +148,17 @@ function SwatchCard({ swatch, onDelete, onDragStart }) {
       </div>
       <p className="text-sm font-medium text-black">{swatch.name}</p>
       {outOfStock && <p className="-mt-1 text-xs font-semibold text-golden-brown">OUT OF STOCK</p>}
+
+      {/* Dragging between the two panels is mouse-only — HTML5 drag events never fire from
+          touch — so this button is the way to move a swatch on a phone or tablet. */}
+      <button
+        type="button"
+        onClick={() => onToggle(swatch)}
+        className="mt-auto flex w-full items-center justify-center gap-1 rounded-md border border-gray-300 px-1 py-1 text-[11px] font-semibold text-gray-600 transition-colors hover:text-black"
+      >
+        <Undo2 size={11} />
+        {outOfStock ? 'In stock' : 'Out of stock'}
+      </button>
     </div>
   )
 }
@@ -152,8 +166,10 @@ function SwatchCard({ swatch, onDelete, onDragStart }) {
 function MaterialGroup({ group, swatches, onChanged, onError }) {
   const [isOpen, setIsOpen] = useState(false)
   const [isAddingSwatch, setIsAddingSwatch] = useState(false)
+  const [isRenaming, setIsRenaming] = useState(false)
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
+  const [renameError, setRenameError] = useState(null)
 
   const available = swatches.filter((s) => s.is_active)
   const unavailable = swatches.filter((s) => !s.is_active)
@@ -171,10 +187,33 @@ function MaterialGroup({ group, swatches, onChanged, onError }) {
       if (file) await uploadAttributeImage(swatch.id, file)
       setIsAddingSwatch(false)
       onChanged()
-    } catch {
-      setFormError('Could not add this swatch. Please try again.')
+    } catch (err) {
+      setFormError(errorDetail(err, 'Could not add this swatch. Please try again.'))
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleRenameGroup = async (name) => {
+    setSaving(true)
+    setRenameError(null)
+    try {
+      await updateAttributeOption(group.id, { name })
+      setIsRenaming(false)
+      onChanged()
+    } catch (err) {
+      setRenameError(errorDetail(err, 'Could not rename this material. Please try again.'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleToggleSwatch = async (swatch) => {
+    try {
+      await updateAttributeOption(swatch.id, { is_active: !swatch.is_active })
+      onChanged()
+    } catch (err) {
+      onError?.(errorDetail(err, 'Could not update that swatch. Please try again.'))
     }
   }
 
@@ -182,8 +221,8 @@ function MaterialGroup({ group, swatches, onChanged, onError }) {
     try {
       await deleteAttributeOption(swatch.id)
       onChanged()
-    } catch {
-      onError?.('Could not delete that swatch. Please try again.')
+    } catch (err) {
+      onError?.(errorDetail(err, 'Could not delete that swatch. Please try again.'))
     }
   }
 
@@ -224,10 +263,19 @@ function MaterialGroup({ group, swatches, onChanged, onError }) {
           {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
           {group.name}
         </button>
-        <span className="flex items-center gap-4 text-sm">
-          <span>
+        <span className="flex items-center gap-3 text-sm">
+          <span className="hidden sm:inline">
             {available.length} available | {unavailable.length} unavailable
           </span>
+          <button
+            type="button"
+            onClick={() => setIsRenaming(true)}
+            aria-label={`Rename ${group.name}`}
+            title="Rename material"
+            className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-600 text-white transition-opacity hover:opacity-90"
+          >
+            <Pencil size={13} />
+          </button>
           <ConfirmButton
             label=""
             icon={Trash2}
@@ -260,7 +308,13 @@ function MaterialGroup({ group, swatches, onChanged, onError }) {
             className="mt-2 grid min-h-24 grid-cols-3 gap-3 rounded-lg bg-white p-3 sm:grid-cols-5"
           >
             {available.map((swatch) => (
-              <SwatchCard key={swatch.id} swatch={swatch} onDelete={handleDeleteSwatch} onDragStart={handleDragStart} />
+              <SwatchCard
+                key={swatch.id}
+                swatch={swatch}
+                onDelete={handleDeleteSwatch}
+                onDragStart={handleDragStart}
+                onToggle={handleToggleSwatch}
+              />
             ))}
           </div>
 
@@ -273,15 +327,32 @@ function MaterialGroup({ group, swatches, onChanged, onError }) {
             className="mt-2 grid min-h-24 grid-cols-3 gap-3 rounded-lg bg-gray-100 p-3 sm:grid-cols-5"
           >
             {unavailable.map((swatch) => (
-              <SwatchCard key={swatch.id} swatch={swatch} onDelete={handleDeleteSwatch} onDragStart={handleDragStart} />
+              <SwatchCard
+                key={swatch.id}
+                swatch={swatch}
+                onDelete={handleDeleteSwatch}
+                onDragStart={handleDragStart}
+                onToggle={handleToggleSwatch}
+              />
             ))}
           </div>
 
-          <Modal isOpen={isAddingSwatch} onClose={() => setIsAddingSwatch(false)} title="Add New Swatch">
-            <AddSwatchForm onCancel={() => setIsAddingSwatch(false)} onSave={handleAddSwatch} saving={saving} error={formError} />
+          <Modal isOpen={isAddingSwatch} onClose={() => { setIsAddingSwatch(false); setFormError(null) }} title="Add New Swatch">
+            <AddSwatchForm onCancel={() => { setIsAddingSwatch(false); setFormError(null) }} onSave={handleAddSwatch} saving={saving} error={formError} />
           </Modal>
         </div>
       )}
+
+      {/* Outside the isOpen block so a collapsed group can still be renamed. */}
+      <Modal isOpen={isRenaming} onClose={() => { setIsRenaming(false); setRenameError(null) }} title="Rename Material">
+        <MaterialForm
+          initial={group}
+          onCancel={() => { setIsRenaming(false); setRenameError(null) }}
+          onSave={handleRenameGroup}
+          saving={saving}
+          error={renameError}
+        />
+      </Modal>
     </div>
   )
 }
@@ -329,8 +400,8 @@ export default function MaterialManager() {
       await createAttributeOption({ category: 'material', name })
       setIsAddingGroup(false)
       refresh()
-    } catch {
-      setFormError('Could not add this material. Please try again.')
+    } catch (err) {
+      setFormError(errorDetail(err, 'Could not add this material. Please try again.'))
     } finally {
       setSaving(false)
     }
@@ -380,8 +451,8 @@ export default function MaterialManager() {
         )}
       </div>
 
-      <Modal isOpen={isAddingGroup} onClose={() => setIsAddingGroup(false)} title="Add Material">
-        <AddMaterialForm onCancel={() => setIsAddingGroup(false)} onSave={handleAddGroup} saving={saving} error={formError} />
+      <Modal isOpen={isAddingGroup} onClose={() => { setIsAddingGroup(false); setFormError(null) }} title="Add Material">
+        <MaterialForm onCancel={() => { setIsAddingGroup(false); setFormError(null) }} onSave={handleAddGroup} saving={saving} error={formError} />
       </Modal>
     </div>
   )

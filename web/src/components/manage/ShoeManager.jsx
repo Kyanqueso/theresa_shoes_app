@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Camera, Eye, EyeOff, Footprints, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Camera, Eye, EyeOff, Footprints, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
 import EmptyState from '../EmptyState.jsx'
 import ConfirmButton from '../ConfirmButton.jsx'
 import LoadingSpinner from '../LoadingSpinner.jsx'
@@ -15,6 +15,7 @@ import {
   uploadShoeImage,
 } from '../../lib/shoesApi.js'
 import { sanitizeText } from '../../lib/textInput.js'
+import { errorDetail } from '../../lib/apiClient.js'
 
 const MAX_IMAGES = 5
 const MAX_DESCRIPTION = 1000
@@ -58,6 +59,20 @@ function ShoeForm({ initial, onCancel, onSave, saving, error }) {
       const target = current.find((img) => img.key === key)
       if (target?.type === 'existing') setRemovedImageIds((ids) => [...ids, target.id])
       return current.filter((img) => img.key !== key)
+    })
+  }
+
+  // Drag-to-reorder is mouse-only (HTML5 drag events never fire from touch), so these
+  // arrows are the way to reorder photos on a phone or tablet.
+  const moveImage = (key, direction) => {
+    setImages((current) => {
+      const from = current.findIndex((img) => img.key === key)
+      const to = from + direction
+      if (from === -1 || to < 0 || to >= current.length) return current
+      const next = [...current]
+      const [moved] = next.splice(from, 1)
+      next.splice(to, 0, moved)
+      return next
     })
   }
 
@@ -162,6 +177,26 @@ function ShoeForm({ initial, onCancel, onSave, saving, error }) {
                   <span className="absolute bottom-1 left-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-xs font-semibold text-white">
                     {index + 1}
                   </span>
+                  <div className="absolute inset-x-0 bottom-0 flex justify-end gap-0.5 p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => moveImage(img.key, -1)}
+                      disabled={index === 0}
+                      aria-label="Move image earlier"
+                      className="flex h-5 w-5 items-center justify-center rounded bg-black/70 text-white disabled:opacity-30"
+                    >
+                      <ArrowLeft size={11} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveImage(img.key, 1)}
+                      disabled={index === images.length - 1}
+                      aria-label="Move image later"
+                      className="flex h-5 w-5 items-center justify-center rounded bg-black/70 text-white disabled:opacity-30"
+                    >
+                      <ArrowRight size={11} />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -262,8 +297,8 @@ export default function ShoeManager() {
 
       closeModal()
       refresh()
-    } catch {
-      setFormError('Could not save this shoe. Please try again.')
+    } catch (err) {
+      setFormError(errorDetail(err, 'Could not save this shoe. Please try again.'))
     } finally {
       setSaving(false)
     }
@@ -273,8 +308,8 @@ export default function ShoeManager() {
     try {
       await updateShoe(shoe.id, { is_hidden: !shoe.is_hidden })
       refresh()
-    } catch {
-      setLoadError('Could not update that shoe. Please try again.')
+    } catch (err) {
+      setLoadError(errorDetail(err, 'Could not update that shoe. Please try again.'))
     }
   }
 
@@ -282,8 +317,8 @@ export default function ShoeManager() {
     try {
       await deleteShoe(shoe.id)
       refresh()
-    } catch {
-      setLoadError('Could not delete that shoe. Please try again.')
+    } catch (err) {
+      setLoadError(errorDetail(err, 'Could not delete that shoe. Please try again.'))
     }
   }
 

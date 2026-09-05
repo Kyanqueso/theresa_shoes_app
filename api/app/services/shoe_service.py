@@ -1,10 +1,18 @@
 import uuid
 
+from fastapi import HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import Shoe, ShoeImage
 from app.schema.shoe import ShoeCreate, ShoeUpdate
 from app.services import image_service
+
+
+def _duplicate_name_error(name: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT, detail=f'A shoe named "{name}" already exists.'
+    )
 
 
 def list_shoes(db: Session, include_hidden: bool = False) -> list[Shoe]:
@@ -21,7 +29,11 @@ def get_shoe(db: Session, shoe_id: uuid.UUID) -> Shoe | None:
 def create_shoe(db: Session, data: ShoeCreate) -> Shoe:
     shoe = Shoe(**data.model_dump())
     db.add(shoe)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise _duplicate_name_error(data.name) from exc
     db.refresh(shoe)
     return shoe
 
@@ -30,9 +42,15 @@ def update_shoe(db: Session, shoe_id: uuid.UUID, data: ShoeUpdate) -> Shoe | Non
     shoe = get_shoe(db, shoe_id)
     if shoe is None:
         return None
-    for field, value in data.model_dump(exclude_unset=True).items():
+    changes = data.model_dump(exclude_unset=True)
+    original_name = shoe.name
+    for field, value in changes.items():
         setattr(shoe, field, value)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise _duplicate_name_error(changes.get("name", original_name)) from exc
     db.refresh(shoe)
     return shoe
 

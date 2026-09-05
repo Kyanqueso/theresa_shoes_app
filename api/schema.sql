@@ -81,6 +81,11 @@ create table if not exists shoes (
     created_at    timestamptz not null default now()
 );
 
+-- Case-insensitive name uniqueness, mirroring companies. Two shoes called "Aria" are
+-- almost certainly a mistake, and the admin has no other way to tell them apart in the
+-- order form's model dropdown.
+create unique index if not exists ix_shoes_name_lower on shoes (lower(name));
+
 -- ── shoe_images ──────────────────────────────────────────────────────────
 create table if not exists shoe_images (
     id            uuid primary key default gen_random_uuid(),
@@ -106,6 +111,15 @@ create table if not exists shoe_attribute_options (
 
 alter table shoe_attribute_options
     add column if not exists parent_id uuid references shoe_attribute_options(id) on delete cascade;
+
+-- Name uniqueness, case-insensitive, scoped to (category, parent).
+-- NULLS NOT DISTINCT (Postgres 15+) is what makes this work for material *groups*: their
+-- parent_id is null, and by default Postgres treats every null as distinct, so without it
+-- two groups both named "Snake" would still slip through. Scoping by parent also means the
+-- same swatch name is allowed under two different materials (Helga/Red and Snake/Red), which
+-- is intended - only a duplicate within one group is rejected.
+create unique index if not exists ix_attribute_options_unique_name
+    on shoe_attribute_options (category, lower(name), parent_id) nulls not distinct;
 
 -- ── orders ───────────────────────────────────────────────────────────────
 create table if not exists orders (

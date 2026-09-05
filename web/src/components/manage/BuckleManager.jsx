@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2, Undo2 } from 'lucide-react'
 import ImagePlaceholder from '../ImagePlaceholder.jsx'
 import ConfirmButton from '../ConfirmButton.jsx'
 import LoadingSpinner from '../LoadingSpinner.jsx'
@@ -13,6 +13,7 @@ import {
   uploadAttributeImage,
 } from '../../lib/attributesApi.js'
 import { sanitizeText } from '../../lib/textInput.js'
+import { errorDetail } from '../../lib/apiClient.js'
 
 function AddBuckleForm({ onCancel, onSave, saving, error }) {
   const [name, setName] = useState('')
@@ -57,7 +58,7 @@ function AddBuckleForm({ onCancel, onSave, saving, error }) {
   )
 }
 
-function BuckleCard({ buckle, onDelete, onDragStart }) {
+function BuckleCard({ buckle, onDelete, onDragStart, onToggle }) {
   const outOfStock = !buckle.is_active
   return (
     <div
@@ -79,6 +80,17 @@ function BuckleCard({ buckle, onDelete, onDragStart }) {
       )}
       <p className="text-sm font-medium text-black">{buckle.name}</p>
       {outOfStock && <p className="-mt-1 text-xs font-semibold text-golden-brown">OUT OF STOCK</p>}
+
+      {/* Touch devices never fire HTML5 drag events, so this is the only way to move a
+          buckle between Available/Unavailable on a phone or tablet. */}
+      <button
+        type="button"
+        onClick={() => onToggle(buckle)}
+        className="mt-auto flex w-full items-center justify-center gap-1 rounded-md border border-gray-300 px-1 py-1 text-[11px] font-semibold text-gray-600 transition-colors hover:text-black"
+      >
+        <Undo2 size={11} />
+        {outOfStock ? 'In stock' : 'Out of stock'}
+      </button>
     </div>
   )
 }
@@ -125,8 +137,8 @@ export default function BuckleManager() {
       await uploadAttributeImage(option.id, file)
       setIsAdding(false)
       refresh()
-    } catch {
-      setFormError('Could not add this buckle. Please try again.')
+    } catch (err) {
+      setFormError(errorDetail(err, 'Could not add this buckle. Please try again.'))
     } finally {
       setSaving(false)
     }
@@ -136,8 +148,8 @@ export default function BuckleManager() {
     try {
       await deleteAttributeOption(buckle.id)
       refresh()
-    } catch {
-      setLoadError('Could not delete that buckle. Please try again.')
+    } catch (err) {
+      setLoadError(errorDetail(err, 'Could not delete that buckle. Please try again.'))
     }
   }
 
@@ -153,8 +165,17 @@ export default function BuckleManager() {
     try {
       await updateAttributeOption(buckleId, { is_active: targetActive })
       refresh()
-    } catch {
-      setLoadError('Could not update that buckle. Please try again.')
+    } catch (err) {
+      setLoadError(errorDetail(err, 'Could not update that buckle. Please try again.'))
+    }
+  }
+
+  const handleToggle = async (buckle) => {
+    try {
+      await updateAttributeOption(buckle.id, { is_active: !buckle.is_active })
+      refresh()
+    } catch (err) {
+      setLoadError(errorDetail(err, 'Could not update that buckle. Please try again.'))
     }
   }
 
@@ -186,7 +207,7 @@ export default function BuckleManager() {
             className="mt-2 grid min-h-24 grid-cols-3 gap-4 rounded-lg bg-white p-3 sm:grid-cols-5"
           >
             {available.map((buckle) => (
-              <BuckleCard key={buckle.id} buckle={buckle} onDelete={handleDelete} onDragStart={handleDragStart} />
+              <BuckleCard key={buckle.id} buckle={buckle} onDelete={handleDelete} onDragStart={handleDragStart} onToggle={handleToggle} />
             ))}
           </div>
 
@@ -199,7 +220,7 @@ export default function BuckleManager() {
             className="mt-2 grid min-h-24 grid-cols-3 gap-4 rounded-lg bg-gray-100 p-3 sm:grid-cols-5"
           >
             {unavailable.map((buckle) => (
-              <BuckleCard key={buckle.id} buckle={buckle} onDelete={handleDelete} onDragStart={handleDragStart} />
+              <BuckleCard key={buckle.id} buckle={buckle} onDelete={handleDelete} onDragStart={handleDragStart} onToggle={handleToggle} />
             ))}
           </div>
         </>

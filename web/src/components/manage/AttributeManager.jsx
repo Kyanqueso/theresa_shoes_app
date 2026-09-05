@@ -14,6 +14,7 @@ import {
   uploadAttributeImage,
 } from '../../lib/attributesApi.js'
 import { sanitizeText } from '../../lib/textInput.js'
+import { errorDetail } from '../../lib/apiClient.js'
 
 function formatDate(value) {
   return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -122,8 +123,8 @@ export default function AttributeManager({ category, icon: Icon, label, itemLabe
       if (file) await uploadAttributeImage(option.id, file)
       closeModal()
       refresh()
-    } catch {
-      setFormError('Could not save. Please try again.')
+    } catch (err) {
+      setFormError(errorDetail(err, 'Could not save. Please try again.'))
     } finally {
       setSaving(false)
     }
@@ -133,8 +134,8 @@ export default function AttributeManager({ category, icon: Icon, label, itemLabe
     try {
       await updateAttributeOption(option.id, { is_active: !option.is_active })
       refresh()
-    } catch {
-      setLoadError('Could not update that item. Please try again.')
+    } catch (err) {
+      setLoadError(errorDetail(err, 'Could not update that item. Please try again.'))
     }
   }
 
@@ -142,8 +143,8 @@ export default function AttributeManager({ category, icon: Icon, label, itemLabe
     try {
       await deleteAttributeOption(option.id)
       refresh()
-    } catch {
-      setLoadError('Could not delete that item. Please try again.')
+    } catch (err) {
+      setLoadError(errorDetail(err, 'Could not delete that item. Please try again.'))
     }
   }
 
