@@ -17,13 +17,6 @@ function formatDate(value) {
   return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-/** Compact date for the per-installment columns — the long form would make an already-wide
- * table unusable. Set by the server when an amount is entered, so it always matches. */
-function formatPayDate(value) {
-  if (!value) return '—'
-  return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })
-}
-
 function formatAmount(value) {
   const number = Number(value)
   if (!number) return '-'
@@ -203,11 +196,11 @@ export default function Payments() {
       orderDate: formatDate(orderDate(payment.order_id)),
       dateDelivered: isEditing ? dateField(payment) : formatDate(payment.date_delivered),
       firstPayment: isEditing ? payField(payment, 'first_payment') : formatAmount(payment.first_payment),
-      firstPayDate: formatPayDate(payment.first_payment_date),
+      firstPayDate: formatDate(payment.first_payment_date),
       secondPayment: isEditing ? payField(payment, 'second_payment') : formatAmount(payment.second_payment),
-      secondPayDate: formatPayDate(payment.second_payment_date),
+      secondPayDate: formatDate(payment.second_payment_date),
       thirdPayment: isEditing ? payField(payment, 'third_payment') : formatAmount(payment.third_payment),
-      thirdPayDate: formatPayDate(payment.third_payment_date),
+      thirdPayDate: formatDate(payment.third_payment_date),
       balance: formatAmount(payment.balance),
       balanceCleared: formatDate(payment.balance_cleared_date),
       ...(isArchiveTab ? { archivedDate: formatDate(orderFor(payment.order_id)?.archived_at) } : {}),
