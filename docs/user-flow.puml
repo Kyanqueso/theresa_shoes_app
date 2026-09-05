@@ -1,0 +1,17 @@
+@startuml
+title Theresa Shoes - High-Level User Flow
+
+start
+
+if (Who's using the app?) then (Guest)
+  :Browse Shoe Collection;
+  :Customize & Place Order;
+  :Get Order Confirmation;
+else (Admin)
+  :Enter PIN;
+  :Manage Companies, Orders & Payments;
+  :Manage Catalog;
+endif
+
+stop
+@enduml

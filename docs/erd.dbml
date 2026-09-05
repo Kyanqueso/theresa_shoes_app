@@ -1,0 +1,129 @@
+// Theresa Shoes - Database ERD
+// Reflects api/app/db/models.py. Paste this whole file into https://dbdiagram.io
+// (or use its "Import DBML" option) to render it.
+
+enum company_status {
+  active
+  archive
+}
+
+enum order_status {
+  current
+  completed
+  archived
+}
+
+enum attribute_category {
+  material
+  mold_type
+  heel_type
+  buckle
+  slingback
+  flatform
+}
+
+Table devices {
+  id uuid [pk, default: `gen_random_uuid()`]
+  device_token varchar [not null, unique]
+  label varchar
+  is_active boolean [not null, default: true]
+  failed_pin_attempts int [not null, default: 0]
+  pin_locked_until timestamptz
+  created_at timestamptz [not null, default: `now()`]
+  last_seen_at timestamptz
+}
+
+Table admin_pin {
+  id int [pk]
+  pin_hash varchar [not null]
+  updated_at timestamptz [not null, default: `now()`]
+}
+
+Table companies {
+  id uuid [pk, default: `gen_random_uuid()`]
+  name varchar [not null, unique, note: 'case-insensitive unique index']
+  status company_status [not null, default: 'active']
+  archived_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table shoes {
+  id uuid [pk, default: `gen_random_uuid()`]
+  name varchar [not null]
+  price "numeric(10,2)" [not null]
+  description text
+  is_hidden boolean [not null, default: false]
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table shoe_images {
+  id uuid [pk, default: `gen_random_uuid()`]
+  shoe_id uuid [not null]
+  image_url varchar [not null]
+  sort_order int [not null, default: 0]
+}
+
+Table shoe_attribute_options {
+  id uuid [pk, default: `gen_random_uuid()`]
+  category attribute_category [not null]
+  name varchar [not null]
+  swatch_color varchar [note: 'nullable - color or image, not both']
+  image_url varchar [note: 'nullable - color or image, not both']
+  is_active boolean [not null, default: true, note: 'in-stock / out-of-stock']
+  parent_id uuid [note: 'self-ref: swatch group, materials only']
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table orders {
+  id uuid [pk, default: `gen_random_uuid()`]
+  company_id uuid
+  client_name varchar [not null]
+  contact_number varchar
+  shoe_id uuid [note: 'nullable, see custom_model_name']
+  custom_model_name varchar
+  material_id uuid
+  mold_type_id uuid
+  heel_type_id uuid
+  color_code varchar
+  size int
+  heel_size int
+  quantity int [not null, default: 1]
+  with_buckle boolean [not null, default: false]
+  buckle_id uuid
+  with_flatform boolean [not null, default: false]
+  flatform_id uuid
+  with_slingback boolean [not null, default: false]
+  slingback_id uuid
+  unit_price "numeric(10,2)" [not null]
+  status order_status [not null, default: 'current']
+  notes_blocks jsonb [not null, default: `[]`]
+  created_at timestamptz [not null, default: `now()`]
+  completed_at timestamptz
+  archived_at timestamptz
+  archived_with_company boolean [not null, default: false]
+}
+
+Table payments {
+  id uuid [pk, default: `gen_random_uuid()`]
+  order_id uuid [not null, unique]
+  client_name varchar
+  total_amount "numeric(10,2)" [not null]
+  first_payment "numeric(10,2)" [not null, default: 0]
+  second_payment "numeric(10,2)" [not null, default: 0]
+  third_payment "numeric(10,2)" [not null, default: 0]
+  balance "numeric(10,2)" [not null]
+  balance_cleared_date date
+  date_delivered date
+}
+
+Ref: shoe_images.shoe_id > shoes.id
+Ref: orders.shoe_id > shoes.id
+Ref: orders.company_id > companies.id
+Ref: payments.order_id - orders.id
+Ref: shoe_attribute_options.parent_id > shoe_attribute_options.id
+Ref: orders.material_id > shoe_attribute_options.id
+Ref: orders.mold_type_id > shoe_attribute_options.id
+Ref: orders.heel_type_id > shoe_attribute_options.id
+Ref: orders.buckle_id > shoe_attribute_options.id
+Ref: orders.flatform_id > shoe_attribute_options.id
+Ref: orders.slingback_id > shoe_attribute_options.id
