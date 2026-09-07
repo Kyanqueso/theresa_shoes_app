@@ -1,5 +1,11 @@
 # Theresa Shoes
 
+The application has already been approved by the client and is currently undergoing further improvements based on their feedback and evolving requirements.
+
+This repository was created as a fresh, centralized version of the project. The previous implementation was built using vanilla HTML, CSS, and JavaScript and had become increasingly spread out as the project evolved. To provide a cleaner structure, improve maintainability, and establish a more scalable foundation for future development, the application was restructured using React.
+
+The current focus is on refining the application and implementing the remaining improvements requested by the client to ensure the software is intuitive, reliable, and used effectively.
+
 Custom-shoe ordering app. Guests browse the collection and submit orders; the owner manages
 companies, orders, payments and the catalog from an admin panel.
 
@@ -34,18 +40,9 @@ uvicorn app.main:app --reload --port 8000
 cd web && npm install && npm run dev
 ```
 
-Both need a `.env` (not committed). `api/.env` needs `DATABASE_URL`, `SUPABASE_URL`,
-`SUPABASE_SERVICE_KEY`, `JWT_SECRET`, `PIN_PEPPER`, `ADMIN_EMAIL`, `CORS_ORIGINS`.
-`web/.env` needs `VITE_API_URL`.
-
 ## Deploying
 
 - **Backend:** `cd api && py -m samcli build --use-container && py -m samcli deploy`
   (Docker must be running — Pillow and psycopg2 need Linux binaries.) Parameters live in
   `api/samconfig.toml`, which is gitignored because it holds secrets.
-- **Frontend:** push to `master`. Vercel builds automatically.
-
-## Schema
-
-`api/app/db/models.py` is the source of truth; `api/schema.sql` is the runnable bootstrap,
-maintained by hand. There are no migrations — keep the two in sync when you change a model.
+- **Frontend:** push to `master`. Vercel builds and deploys automatically.
