@@ -21,6 +21,9 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Lets the web app read the report's filename (which carries the date it was made);
+    # browsers hide every non-basic response header from cross-origin scripts otherwise.
+    expose_headers=["Content-Disposition"],
 )
 
 app.include_router(api_router)

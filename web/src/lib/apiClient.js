@@ -128,6 +128,16 @@ export async function apiFetch(path, { method = 'GET', body, skipAuth = false } 
   return handleResponse(res)
 }
 
+/** For endpoints that return a file. Resolves to { blob, filename }; errors are thrown the
+ * same way apiFetch throws them, so callers can use errorDetail() as usual. */
+export async function apiDownload(path) {
+  const res = await fetch(`${API_URL}${path}`, { headers: authHeaders(false) })
+  if (!res.ok) return handleResponse(res)
+  const disposition = res.headers.get('Content-Disposition') ?? ''
+  const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? null
+  return { blob: await res.blob(), filename }
+}
+
 /** For multipart/form-data uploads — don't set Content-Type, the browser adds the boundary. */
 export async function apiUpload(path, formData, { method = 'POST' } = {}) {
   const res = await fetch(`${API_URL}${path}`, {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Landmark, BadgeDollarSign, Package, Hourglass, Download, X } from 'lucide-react'
+import { Landmark, BadgeDollarSign, Package, Hourglass, Download, Loader2, X } from 'lucide-react'
 import {
   ResponsiveContainer,
   AreaChart,
@@ -15,9 +15,9 @@ import SortSelect from '../../components/SortSelect.jsx'
 import { listOrders } from '../../lib/ordersApi.js'
 import { listPayments } from '../../lib/paymentsApi.js'
 import { listCompanies } from '../../lib/companiesApi.js'
-import { getAnalyticsOverview } from '../../lib/analyticsApi.js'
+import { downloadReport, getAnalyticsOverview } from '../../lib/analyticsApi.js'
+import { errorDetail } from '../../lib/apiClient.js'
 import { paymentFulfillment, PAYMENT_STATUS } from '../../lib/paymentStatus.js'
-import { formatOrderNumber } from '../../lib/orderNumber.js'
 
 const MONTH_LABELS = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
@@ -39,14 +39,7 @@ const formatAmount = (value) => {
   return number.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-function toCsvValue(value) {
-  const text = String(value ?? '')
-  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
-}
-
-function downloadCsv(filename, rows) {
-  const csv = rows.map((row) => row.map(toCsvValue).join(',')).join('\n')
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+function saveFile(blob, filename) {
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
@@ -67,12 +60,14 @@ export default function Analytics() {
   const [isBalanceModalOpen, setIsBalanceModalOpen] = useState(false)
   const [balanceSearch, setBalanceSearch] = useState('')
   const [balanceSort, setBalanceSort] = useState('newest')
+  const [isDownloading, setIsDownloading] = useState(false)
+  const [downloadError, setDownloadError] = useState(null)
 
   useEffect(() => {
     let cancelled = false
     // The overview drives the four tiles and the chart and is aggregated in SQL over every
-    // row. The order/payment lists are only for the "uncollected balance" drill-down table
-    // and the CSV export, which show individual records rather than totals.
+    // row. The order/payment lists are only for the "uncollected balance" drill-down table,
+    // which shows individual records rather than totals.
     Promise.all([
       getAnalyticsOverview(),
       listOrders({ limit: 100 }),
@@ -231,28 +226,19 @@ export default function Analytics() {
     },
   ]
 
-  const handleDownloadReport = () => {
-    const header = [
-      'Order ID', 'Company', 'Client Name', 'Model Ordered', 'Status', 'Order Date',
-      'Quantity', 'Unit Price', 'Total', 'Balance', 'Date Delivered',
-    ]
-    const rows = (stats.activeOrders ?? []).map((order) => {
-      const payment = (stats.activePayments ?? []).find((item) => item.order_id === order.id)
-      return [
-        formatOrderNumber(order.order_number),
-        order.company_id ? companyName(order.company_id) : '—',
-        order.client_name,
-        order.custom_model_name ?? '—',
-        order.status,
-        new Date(order.created_at).toISOString().slice(0, 10),
-        order.quantity,
-        order.unit_price,
-        Number(order.unit_price) * order.quantity,
-        payment ? payment.balance : '—',
-        payment?.date_delivered ?? '—',
-      ]
-    })
-    downloadCsv(`theresa-shoes-report-${new Date().toISOString().slice(0, 10)}.csv`, [header, ...rows])
+  // The workbook is built by the server from every order, so it isn't limited to what this
+  // page happened to load.
+  const handleDownloadReport = async () => {
+    setIsDownloading(true)
+    setDownloadError(null)
+    try {
+      const { blob, filename } = await downloadReport()
+      saveFile(blob, filename ?? 'theresa-shoes-report.xlsx')
+    } catch (err) {
+      setDownloadError(errorDetail(err, 'Could not create the report. Please try again.'))
+    } finally {
+      setIsDownloading(false)
+    }
   }
 
   if (isLoading) {
@@ -270,12 +256,19 @@ export default function Analytics() {
         <button
           type="button"
           onClick={handleDownloadReport}
-          className="flex items-center justify-center gap-2 self-start rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 sm:self-auto"
+          disabled={isDownloading}
+          className="flex items-center justify-center gap-2 self-start rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-60 sm:self-auto"
         >
-          <Download size={16} />
-          Download Report
+          {isDownloading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+          {isDownloading ? 'Preparing Report...' : 'Download Report'}
         </button>
       </div>
+
+      {downloadError && (
+        <p role="alert" className="mt-3 text-sm text-danger sm:text-right">
+          {downloadError}
+        </p>
+      )}
 
       <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {STATS.map((stat) => (

@@ -1,4 +1,4 @@
-import { apiFetch } from './apiClient.js'
+import { apiDownload, apiFetch } from './apiClient.js'
 
 /** Headline figures, aggregated in Postgres.
  *
@@ -9,4 +9,10 @@ import { apiFetch } from './apiClient.js'
 export function getAnalyticsOverview(year) {
   const query = year ? `?year=${year}` : ''
   return apiFetch(`/analytics/overview${query}`)
+}
+
+/** The full business report as an Excel workbook: Summary, Orders, Payments, Uncollected and
+ * Companies tabs. Built on the server so it covers every order, not just the first page. */
+export function downloadReport() {
+  return apiDownload('/analytics/report')
 }
