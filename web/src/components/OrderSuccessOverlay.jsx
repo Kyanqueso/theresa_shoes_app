@@ -1,10 +1,13 @@
 import { Check, MessageCircle, Phone, X } from 'lucide-react'
+import { formatOrderNumber } from '../lib/orderNumber.js'
 
 export default function OrderSuccessOverlay({
   isOpen,
   onClose,
   companyName,
+  orderNumber,
   clientName,
+  canMessageClient = true,
   onViberShare,
   onOwnerViberChat,
   onMessengerShare,
@@ -36,21 +39,32 @@ export default function OrderSuccessOverlay({
           {companyName ? `Order Added to ${companyName}!` : 'Order Added!'}
         </h2>
 
+        {orderNumber != null && (
+          <p className="mt-3 text-sm text-gray-600">
+            Your order number is{' '}
+            <span className="rounded-md bg-white px-2 py-0.5 font-mono text-base font-bold text-primary">
+              {formatOrderNumber(orderNumber)}
+            </span>
+          </p>
+        )}
+
         <div className="mt-6 flex items-center gap-3">
           <span className="h-px flex-1 bg-gray-300" />
           <span className="text-xs text-gray-500">Share Order Summary</span>
           <span className="h-px flex-1 bg-gray-300" />
         </div>
 
-        <div className="mt-4 grid grid-cols-3 gap-2">
-          <button
-            type="button"
-            onClick={onViberShare}
-            className="flex flex-col items-center gap-1 rounded-lg bg-[#7C6FE0] px-2 py-2.5 text-xs font-semibold text-white transition-opacity hover:opacity-90"
-          >
-            <Phone size={16} />
-            {firstName}&apos;s Viber
-          </button>
+        <div className={`mt-4 grid gap-2 ${canMessageClient ? 'grid-cols-3' : 'grid-cols-2'}`}>
+          {canMessageClient && (
+            <button
+              type="button"
+              onClick={onViberShare}
+              className="flex flex-col items-center gap-1 rounded-lg bg-[#7C6FE0] px-2 py-2.5 text-xs font-semibold text-white transition-opacity hover:opacity-90"
+            >
+              <Phone size={16} />
+              {firstName}&apos;s Viber
+            </button>
+          )}
           <button
             type="button"
             onClick={onOwnerViberChat}

@@ -1,3 +1,5 @@
+import { formatOrderNumber } from './orderNumber.js'
+
 /** The single definition of a shared order summary — the block of text pasted into Viber or
  * Messenger.
  *
@@ -29,6 +31,7 @@ export function notesTextFromBlocks(blocks) {
 }
 
 export function buildOrderSummary({
+  orderNumber,
   modelName,
   unitPrice,
   quantity,
@@ -50,6 +53,9 @@ export function buildOrderSummary({
   const qty = Number(quantity ?? 0)
 
   const lines = [
+    // First, so whoever receives the message can search for it straight away. Absent only
+    // before an order has actually been saved.
+    orderNumber != null && formatOrderNumber(orderNumber),
     `${modelName} - ${peso(price)} each`,
     // Who it's for comes first: whoever receives this needs to know that before the specs.
     `Client: ${clientName}`,

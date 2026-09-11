@@ -5,8 +5,12 @@ import PhoneNumberInput, { CONTACT_LENGTH, CONTACT_PREFIX } from '../PhoneNumber
 import { createOrder, uploadNotesImage } from '../../lib/ordersApi.js'
 import { sanitizeText } from '../../lib/textInput.js'
 import { ApiError } from '../../lib/apiClient.js'
+import DatePicker from '../DatePicker.jsx'
+import { EARLIEST_DATE, todayIso } from '../../lib/dates.js'
+import FieldLabel from '../FieldLabel.jsx'
 
-const MIN_DATE = '2000-01-01'
+// Earliest date an order can be backdated to — same limit the API enforces.
+const MIN_DATE = EARLIEST_DATE
 // The shop is in Marikina (UTC+8). Sending a bare "2026-09-05T21:30" lets the server read it
 // as UTC, which pushes an evening order onto the next day. The offset makes it unambiguous.
 const BUSINESS_UTC_OFFSET = '+08:00'
@@ -17,14 +21,10 @@ function detailOf(err, fallback) {
   return err instanceof ApiError && typeof err.detail === 'string' ? err.detail : fallback
 }
 
-function todayIso() {
-  return new Date().toISOString().slice(0, 10)
-}
-
 function NumberField({ label, value, onChange, min = 1, max, className = '' }) {
   return (
     <div className={className}>
-      <label className="text-sm font-semibold text-black">{label}</label>
+      <FieldLabel>{label}</FieldLabel>
       <input
         type="number"
         min={min}
@@ -44,7 +44,7 @@ function NumberField({ label, value, onChange, min = 1, max, className = '' }) {
 function SelectField({ label, value, onChange, options, className = '' }) {
   return (
     <div className={className}>
-      <label className="text-sm font-semibold text-black">{label}</label>
+      <FieldLabel>{label}</FieldLabel>
       <select
         value={value ?? ''}
         onChange={(event) => onChange(event.target.value || null)}
@@ -64,7 +64,7 @@ function SelectField({ label, value, onChange, options, className = '' }) {
 function YesNoRadio({ label, value, onChange }) {
   return (
     <div>
-      <label className="text-sm font-semibold text-black">{label}</label>
+      <FieldLabel as="p">{label}</FieldLabel>
       <div className="mt-2 flex items-center gap-4">
         {['Yes', 'No'].map((option) => (
           <label key={option} className="flex items-center gap-1.5 text-sm text-gray-700">
@@ -244,7 +244,7 @@ export default function AddOrderOverlay({ isOpen, onClose, companyId, attributeO
         <div className="flex-1 overflow-y-auto px-6 py-5">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="text-sm font-semibold text-black">Client Name</label>
+              <FieldLabel>Client Name</FieldLabel>
               <input
                 type="text"
                 value={clientName}
@@ -254,12 +254,12 @@ export default function AddOrderOverlay({ isOpen, onClose, companyId, attributeO
               />
             </div>
             <div>
-              <label className="text-sm font-semibold text-black">Contact Number</label>
+              <FieldLabel optional>Contact Number</FieldLabel>
               <PhoneNumberInput value={contactNumber} onChange={setContactNumber} className="mt-2 bg-white" />
             </div>
 
             <div>
-              <label className="text-sm font-semibold text-black">Model Ordered</label>
+              <FieldLabel>Model Ordered</FieldLabel>
               <input
                 type="text"
                 value={modelName}
@@ -269,15 +269,10 @@ export default function AddOrderOverlay({ isOpen, onClose, companyId, attributeO
               />
             </div>
             <div>
-              <label className="text-sm font-semibold text-black">Order Date</label>
-              <input
-                type="date"
-                value={orderDate}
-                min={MIN_DATE}
-                max={todayIso()}
-                onChange={(event) => setOrderDate(event.target.value)}
-                className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30"
-              />
+              <FieldLabel as="p">Order Date</FieldLabel>
+              <div className="mt-2">
+                <DatePicker value={orderDate} onChange={setOrderDate} min={MIN_DATE} ariaLabel="Order date" />
+              </div>
             </div>
           </div>
 
@@ -285,7 +280,7 @@ export default function AddOrderOverlay({ isOpen, onClose, companyId, attributeO
             <NumberField label="Size" value={size} onChange={setSize} min={1} max={125} />
             <SelectField label="Material" value={material} onChange={setMaterial} options={attributeOptions.material ?? []} />
             <div>
-              <label className="text-sm font-semibold text-black">Color</label>
+              <FieldLabel>Color / Code</FieldLabel>
               <input
                 type="text"
                 value={colorCode}
@@ -311,7 +306,7 @@ export default function AddOrderOverlay({ isOpen, onClose, companyId, attributeO
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <NumberField label="Quantity" value={quantity} onChange={setQuantity} min={1} max={100} />
             <div>
-              <label className="text-sm font-semibold text-black">Price</label>
+              <FieldLabel>Price</FieldLabel>
               <input
                 type="number"
                 min={0}

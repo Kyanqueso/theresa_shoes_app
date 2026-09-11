@@ -14,6 +14,7 @@ from sqlalchemy import (
     String,
     Text,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
@@ -177,6 +178,12 @@ class Order(Base):
     __tablename__ = "orders"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    # Human-readable reference, shown as ORDER-001. Assigned by a Postgres sequence at insert
+    # (see schema.sql), so it's never reused and deleting an order never renumbers the rest.
+    # Reflects creation order, not the order date — a backdated order still gets the next one.
+    order_number = Column(
+        Integer, nullable=False, unique=True, server_default=text("nextval('orders_order_number_seq')")
+    )
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=True, index=True)
     client_name = Column(String, nullable=False)
     contact_number = Column(String, nullable=True)
@@ -247,3 +254,9 @@ class Payment(Base):
     date_delivered = Column(Date, nullable=True)
 
     order = relationship("Order", back_populates="payment")
+
+    @property
+    def order_number(self) -> int | None:
+        """A payment and its order are one record, so it carries the order's number rather than
+        a second one of its own — two references for the same thing would only confuse."""
+        return self.order.order_number if self.order is not None else None

@@ -22,6 +22,7 @@ import { isDeviceRecognized, verifyPin } from '../lib/auth.js'
 import { OWNER_VIBER_DIGITS, openViberChat, toViberDigits } from '../lib/businessContact.js'
 import { findCloseMatchingCompany } from '../lib/companySimilarity.js'
 import { buildOrderSummary } from '../lib/orderSummary.js'
+import FieldLabel from '../components/FieldLabel.jsx'
 
 // Heel sizes offered in the dropdown.
 const HEEL_SIZE_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -30,7 +31,7 @@ const POST_ORDER_COOLDOWN_MS = 30_000
 function PillGroup({ label, options, value, onChange, onPreview }) {
   return (
     <div>
-      <p className="text-sm font-semibold text-black">{label}</p>
+      <FieldLabel as="p">{label}</FieldLabel>
       <div className="mt-2 flex flex-wrap gap-2">
         {options.map((option) => (
           <button
@@ -58,7 +59,7 @@ function PillGroup({ label, options, value, onChange, onPreview }) {
 function YesNoToggle({ label, value, onChange, onYes }) {
   return (
     <div>
-      <p className="text-sm font-semibold text-black">{label}</p>
+      <FieldLabel as="p">{label}</FieldLabel>
       <div className="mt-2 flex gap-2">
         {['Yes', 'No'].map((option) => (
           <button
@@ -85,7 +86,7 @@ function YesNoToggle({ label, value, onChange, onYes }) {
 function NumberSelect({ label, value, onChange }) {
   return (
     <div>
-      <label className="text-sm font-semibold text-black">{label}</label>
+      <FieldLabel>{label}</FieldLabel>
       <select
         value={value}
         onChange={(event) => onChange(Number(event.target.value))}
@@ -107,7 +108,7 @@ function NumberSelect({ label, value, onChange }) {
 function NumberInput({ label, value, onChange, min = 1, max, placeholder }) {
   return (
     <div>
-      <label className="text-sm font-semibold text-black">{label}</label>
+      <FieldLabel>{label}</FieldLabel>
       <input
         type="number"
         min={min}
@@ -142,7 +143,7 @@ function CompanyCombobox({ companies, value, onChange }) {
 
   return (
     <div ref={containerRef} className="relative">
-      <label className="text-sm font-semibold text-black">Company Name</label>
+      <FieldLabel>Company Name</FieldLabel>
       <input
         type="text"
         value={value}
@@ -207,6 +208,9 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
   const [submitError, setSubmitError] = useState(null)
   const [isReviewOpen, setIsReviewOpen] = useState(false)
   const [isSuccessOpen, setIsSuccessOpen] = useState(false)
+  // The number the server gave this order — shown on the success screen and put at the top
+  // of the shared summary, so the shop can look the order up the moment the message arrives.
+  const [placedOrderNumber, setPlacedOrderNumber] = useState(null)
   const [cooldownRemaining, setCooldownRemaining] = useState(0)
   const [preview, setPreview] = useState(null)
   const [isLightboxOpen, setIsLightboxOpen] = useState(false)
@@ -319,7 +323,9 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
     heelType !== null &&
     clientName.trim() !== '' &&
     companyName.trim() !== '' &&
-    contactNumber.length === CONTACT_LENGTH
+    // Contact number is optional — left at the bare "09" prefix it's simply not sent. A partly
+    // typed number is still refused, so a half-entered one can't slip through as if complete.
+    (contactNumber === CONTACT_PREFIX || contactNumber.length === CONTACT_LENGTH)
 
   const handleReviewClick = () => {
     setSubmitError(null)
@@ -339,7 +345,7 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
     setIsSubmitting(true)
     try {
       const notesBlocks = await buildNotesBlocks()
-      await createOrder({
+      const created = await createOrder({
         client_name: clientName.trim(),
         company_name: companyName.trim() || null,
         contact_number: contactNumber === CONTACT_PREFIX ? null : contactNumber,
@@ -359,6 +365,7 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
         notes_blocks: notesBlocks,
       })
       setIsReviewOpen(false)
+      setPlacedOrderNumber(created.order_number)
       setIsSuccessOpen(true)
       setCooldownRemaining(POST_ORDER_COOLDOWN_MS / 1000)
     } catch (err) {
@@ -392,6 +399,7 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
 
   const buildOrderSummaryText = () =>
     buildOrderSummary({
+      orderNumber: placedOrderNumber,
       modelName: shoe.name,
       unitPrice: shoe.price,
       quantity: quantityValue,
@@ -445,13 +453,9 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
     } catch {
       // Clipboard access can fail (insecure context) — the chat still opens, just unpasted.
     }
+    // Only reachable when a number was given — the button is hidden otherwise.
     const digits = toViberDigits(contactNumber)
-    if (digits) {
-      openViberChat(digits)
-    } else {
-      // No number on the order — the recipient picker is the only option left.
-      window.open(`viber://forward?text=${encodeURIComponent(summary)}`, '_blank', 'noopener,noreferrer')
-    }
+    if (digits) openViberChat(digits)
   }
 
   const handleOwnerViberChat = async () => {
@@ -569,7 +573,7 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
           />
 
           <div>
-            <label className="text-sm font-semibold text-black">Enter Color / Code</label>
+            <FieldLabel>Color / Code</FieldLabel>
             <input
               type="text"
               value={colorCode}
@@ -664,7 +668,7 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
-              <label className="text-sm font-semibold text-black">Client Name</label>
+              <FieldLabel>Client Name</FieldLabel>
               <input
                 type="text"
                 value={clientName}
@@ -675,7 +679,7 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
             </div>
             <CompanyCombobox companies={companies} value={companyName} onChange={setCompanyName} />
             <div>
-              <label className="text-sm font-semibold text-black">Contact #</label>
+              <FieldLabel optional>Contact Number</FieldLabel>
               <PhoneNumberInput value={contactNumber} onChange={setContactNumber} className="mt-2" />
             </div>
           </div>
@@ -751,7 +755,10 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
         isOpen={isSuccessOpen}
         onClose={() => setIsSuccessOpen(false)}
         companyName={companyName.trim()}
+        orderNumber={placedOrderNumber}
         clientName={clientName}
+        // No number, no "<name>'s Viber" — there'd be nobody for it to open a chat with.
+        canMessageClient={Boolean(toViberDigits(contactNumber))}
         onViberShare={handleViberShare}
         onOwnerViberChat={handleOwnerViberChat}
         onMessengerShare={handleMessengerShare}

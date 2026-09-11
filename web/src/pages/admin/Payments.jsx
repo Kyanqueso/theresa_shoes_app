@@ -11,6 +11,8 @@ import { listOrders } from '../../lib/ordersApi.js'
 import { listPayments, updatePayment } from '../../lib/paymentsApi.js'
 import { paymentFulfillment, PAYMENT_STATUS } from '../../lib/paymentStatus.js'
 import { errorDetail } from '../../lib/apiClient.js'
+import DatePicker from '../../components/DatePicker.jsx'
+import { formatOrderNumber } from '../../lib/orderNumber.js'
 
 function formatDate(value) {
   if (!value) return '—'
@@ -21,10 +23,6 @@ function formatAmount(value) {
   const number = Number(value)
   if (!number) return '-'
   return number.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
-
-function shortId(id) {
-  return `#${id.slice(0, 8)}`
 }
 
 const inputClass =
@@ -105,6 +103,9 @@ export default function Payments() {
         first_payment: payment.first_payment ?? 0,
         second_payment: payment.second_payment ?? 0,
         third_payment: payment.third_payment ?? 0,
+        first_payment_date: payment.first_payment_date ?? '',
+        second_payment_date: payment.second_payment_date ?? '',
+        third_payment_date: payment.third_payment_date ?? '',
       }
     }
     setDrafts(seed)
@@ -130,7 +131,10 @@ export default function Payments() {
         String(original.date_delivered ?? '') !== String(draft.date_delivered ?? '') ||
         Number(original.first_payment ?? 0) !== Number(draft.first_payment ?? 0) ||
         Number(original.second_payment ?? 0) !== Number(draft.second_payment ?? 0) ||
-        Number(original.third_payment ?? 0) !== Number(draft.third_payment ?? 0)
+        Number(original.third_payment ?? 0) !== Number(draft.third_payment ?? 0) ||
+        String(original.first_payment_date ?? '') !== String(draft.first_payment_date ?? '') ||
+        String(original.second_payment_date ?? '') !== String(draft.second_payment_date ?? '') ||
+        String(original.third_payment_date ?? '') !== String(draft.third_payment_date ?? '')
       )
     })
 
@@ -148,6 +152,11 @@ export default function Payments() {
         edited.map(([paymentId, draft]) =>
           updatePayment(paymentId, {
             date_delivered: draft.date_delivered || null,
+            // A zeroed instalment has no date. For a paid one left without a date, null lets
+            // the server stamp today, which is the same default a new payment gets.
+            first_payment_date: Number(draft.first_payment) > 0 ? draft.first_payment_date || null : null,
+            second_payment_date: Number(draft.second_payment) > 0 ? draft.second_payment_date || null : null,
+            third_payment_date: Number(draft.third_payment) > 0 ? draft.third_payment_date || null : null,
             first_payment: Number(draft.first_payment) || 0,
             second_payment: Number(draft.second_payment) || 0,
             third_payment: Number(draft.third_payment) || 0,
@@ -164,14 +173,34 @@ export default function Payments() {
     }
   }
 
+  // Delivery can be cleared — an order that hasn't gone out yet has no delivery date.
   const dateField = (payment) => (
-    <input
-      type="date"
+    <DatePicker
+      compact
+      clearable
       value={drafts[payment.id]?.date_delivered ?? ''}
-      onChange={(event) => updateDraft(payment.id, 'date_delivered', event.target.value)}
-      className={inputClass}
+      onChange={(iso) => updateDraft(payment.id, 'date_delivered', iso)}
+      placeholder="Not delivered"
+      ariaLabel={`Delivery date for ${payment.client_name ?? 'this order'}`}
     />
   )
+
+  /** Date an instalment was received. Only meaningful once there's an amount beside it, so
+   * it's disabled (and shown blank) while that instalment is zero. */
+  const payDateField = (payment, amountField, dateFieldName, ordinal) => {
+    const draft = drafts[payment.id] ?? {}
+    const hasAmount = Number(draft[amountField]) > 0
+    return (
+      <DatePicker
+        compact
+        disabled={!hasAmount}
+        value={hasAmount ? draft[dateFieldName] ?? '' : ''}
+        onChange={(iso) => updateDraft(payment.id, dateFieldName, iso)}
+        placeholder={hasAmount ? 'Today' : '—'}
+        ariaLabel={`${ordinal} payment date for ${payment.client_name ?? 'this order'}`}
+      />
+    )
+  }
 
   /** What a 3rd payment has to be: the order total less the first two instalments, taken
    * from the draft so it tracks what's being typed rather than what's saved. */
@@ -207,18 +236,24 @@ export default function Payments() {
     const isPaid = Number(payment.balance) <= 0
 
     return {
-      // Same ID as the order everywhere — an order and its payment are one record, not two.
-      id: shortId(payment.order_id),
+      // Same number as the order everywhere — an order and its payment are one record, not two.
+      id: formatOrderNumber(payment.order_number),
       clientName: payment.client_name || '—',
       totalAmount: Number(payment.total_amount).toLocaleString(),
       orderDate: formatDate(orderDate(payment.order_id)),
       dateDelivered: isEditing ? dateField(payment) : formatDate(payment.date_delivered),
       firstPayment: isEditing ? payField(payment, 'first_payment') : formatAmount(payment.first_payment),
-      firstPayDate: formatDate(payment.first_payment_date),
+      firstPayDate: isEditing
+        ? payDateField(payment, 'first_payment', 'first_payment_date', '1st')
+        : formatDate(payment.first_payment_date),
       secondPayment: isEditing ? payField(payment, 'second_payment') : formatAmount(payment.second_payment),
-      secondPayDate: formatDate(payment.second_payment_date),
+      secondPayDate: isEditing
+        ? payDateField(payment, 'second_payment', 'second_payment_date', '2nd')
+        : formatDate(payment.second_payment_date),
       thirdPayment: isEditing ? payField(payment, 'third_payment') : formatAmount(payment.third_payment),
-      thirdPayDate: formatDate(payment.third_payment_date),
+      thirdPayDate: isEditing
+        ? payDateField(payment, 'third_payment', 'third_payment_date', '3rd')
+        : formatDate(payment.third_payment_date),
       balance: formatAmount(payment.balance),
       balanceCleared: formatDate(payment.balance_cleared_date),
       ...(isArchiveTab ? { archivedDate: formatDate(orderFor(payment.order_id)?.archived_at) } : {}),
@@ -250,7 +285,7 @@ export default function Payments() {
       <h1 className="text-2xl font-bold text-black">{companyName}&apos;s Payment &amp; Delivery</h1>
 
       <ListToolbar
-        searchPlaceholder="Search Client Name..."
+        searchPlaceholder="Search client name or order ID..."
         search={search}
         onSearchChange={(value) => { setSearch(value); setPage(1) }}
         activeTab={activeTab}

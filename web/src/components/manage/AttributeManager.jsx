@@ -15,6 +15,7 @@ import {
 } from '../../lib/attributesApi.js'
 import { sanitizeText } from '../../lib/textInput.js'
 import { errorDetail } from '../../lib/apiClient.js'
+import FieldLabel from '../FieldLabel.jsx'
 
 function formatDate(value) {
   return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -38,13 +39,13 @@ function OptionForm({ itemLabel, initial, onCancel, onSave, saving, error }) {
       />
 
       <div>
-        <label className="text-sm font-semibold text-black">{itemLabel} Name</label>
+        <FieldLabel>{itemLabel} Name</FieldLabel>
         <input
           type="text"
           value={name}
           maxLength={50}
           onChange={(event) => setName(sanitizeText(event.target.value))}
-          className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30"
+          className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30"
         />
       </div>
 

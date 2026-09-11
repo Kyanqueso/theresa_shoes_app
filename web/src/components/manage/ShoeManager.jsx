@@ -16,6 +16,7 @@ import {
 } from '../../lib/shoesApi.js'
 import { sanitizeText } from '../../lib/textInput.js'
 import { errorDetail } from '../../lib/apiClient.js'
+import FieldLabel from '../FieldLabel.jsx'
 
 const MAX_IMAGES = 5
 const MAX_DESCRIPTION = 1000
@@ -95,36 +96,36 @@ function ShoeForm({ initial, onCancel, onSave, saving, error }) {
   return (
     <div className="flex flex-col gap-4 text-left">
       <div>
-        <label className="text-sm font-semibold text-black">Shoe Name</label>
+        <FieldLabel>Shoe Name</FieldLabel>
         <input
           type="text"
           value={name}
           maxLength={50}
           onChange={(event) => setName(sanitizeText(event.target.value))}
-          className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30"
+          className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30"
         />
       </div>
 
       <div>
-        <label className="text-sm font-semibold text-black">Price</label>
+        <FieldLabel>Price</FieldLabel>
         <input
           type="number"
           min="0"
           step="0.01"
           value={price}
           onChange={(event) => setPrice(event.target.value)}
-          className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30"
+          className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30"
         />
       </div>
 
       <div>
-        <label className="text-sm font-semibold text-black">Description</label>
+        <FieldLabel optional>Description</FieldLabel>
         <textarea
           value={description}
           maxLength={MAX_DESCRIPTION}
           onChange={(event) => setDescription(event.target.value)}
           rows={4}
-          className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30"
+          className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30"
         />
         <p className="mt-1 text-right text-xs text-gray-400">
           {description.length} / {MAX_DESCRIPTION}
@@ -132,9 +133,12 @@ function ShoeForm({ initial, onCancel, onSave, saving, error }) {
       </div>
 
       <div>
-        <label className="text-sm font-semibold text-black">
-          Upload Images ({isEdit ? `up to ${MAX_IMAGES}` : `1-${MAX_IMAGES} required`})
-        </label>
+        <FieldLabel
+          as="p"
+          hint={isEdit ? `Up to ${MAX_IMAGES} photos.` : `1 to ${MAX_IMAGES} photos. The first is the main photo.`}
+        >
+          Photos
+        </FieldLabel>
 
         <div className="mt-2 flex items-stretch overflow-hidden rounded-lg border border-gray-300 bg-white">
           <label className="flex cursor-pointer items-center border-r border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">

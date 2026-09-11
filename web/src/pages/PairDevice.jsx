@@ -5,6 +5,7 @@ import PinInput from '../components/PinInput.jsx'
 import { claimPairingCode } from '../lib/devicesApi.js'
 import { errorDetail } from '../lib/apiClient.js'
 import { sanitizeText } from '../lib/textInput.js'
+import FieldLabel from '../components/FieldLabel.jsx'
 
 const CODE_LENGTH = 6
 const PIN_LENGTH = 4
@@ -99,7 +100,7 @@ export default function PairDevice() {
 
       {!onPin && (
         <div className="mt-6 w-full max-w-xs">
-          <label className="text-sm font-semibold text-black">Name this device (optional)</label>
+          <FieldLabel optional hint="Shows in the Devices list, e.g. Shop iPad.">Name this device</FieldLabel>
           <input
             type="text"
             value={label}

@@ -4,8 +4,7 @@ import EmptyState from '../EmptyState.jsx'
 import ConfirmButton from '../ConfirmButton.jsx'
 import LoadingSpinner from '../LoadingSpinner.jsx'
 import Modal from './Modal.jsx'
-import ColorDropzone from './ColorDropzone.jsx'
-import ImageDropzone from './ImageDropzone.jsx'
+import ImageOptionForm from './ImageOptionForm.jsx'
 import {
   createAttributeOption,
   deleteAttributeOption,
@@ -15,6 +14,7 @@ import {
 } from '../../lib/attributesApi.js'
 import { sanitizeText } from '../../lib/textInput.js'
 import { errorDetail } from '../../lib/apiClient.js'
+import FieldLabel from '../FieldLabel.jsx'
 
 /** Used for both adding a material group and renaming an existing one — `initial` decides which. */
 function MaterialForm({ initial, onCancel, onSave, saving, error }) {
@@ -24,13 +24,13 @@ function MaterialForm({ initial, onCancel, onSave, saving, error }) {
   return (
     <div className="flex flex-col gap-4 text-left">
       <div>
-        <label className="text-sm font-semibold text-black">Material Name</label>
+        <FieldLabel>Material Name</FieldLabel>
         <input
           type="text"
           value={name}
           maxLength={50}
           onChange={(event) => setName(sanitizeText(event.target.value))}
-          className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30"
+          className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30"
         />
       </div>
 
@@ -53,79 +53,7 @@ function MaterialForm({ initial, onCancel, onSave, saving, error }) {
   )
 }
 
-function AddSwatchForm({ onCancel, onSave, saving, error }) {
-  const [name, setName] = useState('')
-  const [swatchType, setSwatchType] = useState('color')
-  const [color, setColor] = useState('')
-  const [file, setFile] = useState(null)
-  const previewUrl = file ? URL.createObjectURL(file) : null
-
-  const isReady = swatchType === 'color' ? Boolean(color) : Boolean(file)
-
-  return (
-    <div className="flex flex-col gap-4 text-left">
-      <div>
-        <p className="text-sm font-semibold text-black">Swatch Type</p>
-        <div className="mt-2 flex gap-2">
-          {['color', 'image'].map((type) => (
-            <button
-              key={type}
-              type="button"
-              onClick={() => setSwatchType(type)}
-              className={`rounded-lg border px-4 py-1.5 text-sm font-medium capitalize transition-colors ${
-                swatchType === type
-                  ? 'border-primary bg-primary text-white'
-                  : 'border-gray-300 text-gray-600 hover:text-black'
-              }`}
-            >
-              {type}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {swatchType === 'color' ? (
-        <ColorDropzone label="Swatch Color" color={color} onChange={setColor} />
-      ) : (
-        <ImageDropzone label="Swatch Image" previewUrl={previewUrl} onFileSelect={setFile} />
-      )}
-
-      <div>
-        <label className="text-sm font-semibold text-black">Swatch Name</label>
-        <input
-          type="text"
-          value={name}
-          maxLength={50}
-          onChange={(event) => setName(sanitizeText(event.target.value))}
-          placeholder="e.g. Chestnut"
-          className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30"
-        />
-      </div>
-
-      {error && <p className="text-sm font-semibold text-danger">{error}</p>}
-
-      <div className="mt-2 flex justify-end gap-3">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="rounded-lg bg-danger px-5 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          disabled={!name.trim() || !isReady || saving}
-          onClick={() => onSave({ name: name.trim(), color: swatchType === 'color' ? color : null, file: swatchType === 'image' ? file : null })}
-          className="rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-        >
-          {saving ? 'Saving…' : 'Add'}
-        </button>
-      </div>
-    </div>
-  )
-}
-
-function SwatchCard({ swatch, onDelete, onDragStart, onToggle }) {
+function SwatchCard({ swatch, onDelete, onDragStart, onToggle, onEdit }) {
   const outOfStock = !swatch.is_active
   return (
     <div
@@ -133,12 +61,21 @@ function SwatchCard({ swatch, onDelete, onDragStart, onToggle }) {
       onDragStart={(event) => onDragStart(event, swatch.id)}
       className="relative flex cursor-grab flex-col items-center gap-2 rounded-lg bg-white p-2"
     >
+      <button
+        type="button"
+        onClick={() => onEdit(swatch)}
+        aria-label={`Edit ${swatch.name}`}
+        title="Edit name and image"
+        className="absolute right-8 top-1 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-white"
+      >
+        <Pencil size={12} />
+      </button>
       <ConfirmButton
         label=""
         icon={Trash2}
         question={`Delete "${swatch.name}"?`}
         onConfirm={() => onDelete(swatch)}
-        triggerClassName="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-danger text-white"
+        triggerClassName="absolute right-1 top-1 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-danger text-white"
       />
       <div
         className="aspect-[3/4] w-full overflow-hidden rounded-md border border-black/10"
@@ -167,6 +104,7 @@ function MaterialGroup({ group, swatches, onChanged, onError }) {
   const [isOpen, setIsOpen] = useState(false)
   const [isAddingSwatch, setIsAddingSwatch] = useState(false)
   const [isRenaming, setIsRenaming] = useState(false)
+  const [editingSwatch, setEditingSwatch] = useState(null)
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
   const [renameError, setRenameError] = useState(null)
@@ -174,17 +112,13 @@ function MaterialGroup({ group, swatches, onChanged, onError }) {
   const available = swatches.filter((s) => s.is_active)
   const unavailable = swatches.filter((s) => !s.is_active)
 
-  const handleAddSwatch = async ({ name, color, file }) => {
+  const handleAddSwatch = async ({ name, file }) => {
     setSaving(true)
     setFormError(null)
     try {
-      const swatch = await createAttributeOption({
-        category: 'material',
-        name,
-        swatch_color: color || null,
-        parent_id: group.id,
-      })
-      if (file) await uploadAttributeImage(swatch.id, file)
+      // Image-only: swatches no longer have a colour option.
+      const swatch = await createAttributeOption({ category: 'material', name, parent_id: group.id })
+      await uploadAttributeImage(swatch.id, file)
       setIsAddingSwatch(false)
       onChanged()
     } catch (err) {
@@ -203,6 +137,27 @@ function MaterialGroup({ group, swatches, onChanged, onError }) {
       onChanged()
     } catch (err) {
       setRenameError(errorDetail(err, 'Could not rename this material. Please try again.'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleEditSwatch = async ({ name, file }) => {
+    const swatch = editingSwatch
+    setSaving(true)
+    setFormError(null)
+    try {
+      if (name !== swatch.name) await updateAttributeOption(swatch.id, { name })
+      if (file) {
+        await uploadAttributeImage(swatch.id, file)
+        // A leftover colour from before swatches went image-only would otherwise keep
+        // showing behind the new photo in some views.
+        if (swatch.swatch_color) await updateAttributeOption(swatch.id, { swatch_color: null })
+      }
+      setEditingSwatch(null)
+      onChanged()
+    } catch (err) {
+      setFormError(errorDetail(err, 'Could not save this swatch. Please try again.'))
     } finally {
       setSaving(false)
     }
@@ -314,6 +269,7 @@ function MaterialGroup({ group, swatches, onChanged, onError }) {
                 onDelete={handleDeleteSwatch}
                 onDragStart={handleDragStart}
                 onToggle={handleToggleSwatch}
+                onEdit={setEditingSwatch}
               />
             ))}
           </div>
@@ -333,15 +289,40 @@ function MaterialGroup({ group, swatches, onChanged, onError }) {
                 onDelete={handleDeleteSwatch}
                 onDragStart={handleDragStart}
                 onToggle={handleToggleSwatch}
+                onEdit={setEditingSwatch}
               />
             ))}
           </div>
 
           <Modal isOpen={isAddingSwatch} onClose={() => { setIsAddingSwatch(false); setFormError(null) }} title="Add New Swatch">
-            <AddSwatchForm onCancel={() => { setIsAddingSwatch(false); setFormError(null) }} onSave={handleAddSwatch} saving={saving} error={formError} />
+            <ImageOptionForm
+              nameLabel="Swatch Name"
+              imageLabel="Swatch Image"
+              placeholder="e.g. Chestnut"
+              onCancel={() => { setIsAddingSwatch(false); setFormError(null) }}
+              onSave={handleAddSwatch}
+              saving={saving}
+              error={formError}
+            />
           </Modal>
         </div>
       )}
+
+      {/* key forces a fresh form per swatch, so one swatch's half-typed edit can't leak into the next. */}
+      <Modal isOpen={editingSwatch !== null} onClose={() => { setEditingSwatch(null); setFormError(null) }} title="Edit Swatch">
+        {editingSwatch && (
+          <ImageOptionForm
+            key={editingSwatch.id}
+            nameLabel="Swatch Name"
+            imageLabel="Swatch Image"
+            initial={editingSwatch}
+            onCancel={() => { setEditingSwatch(null); setFormError(null) }}
+            onSave={handleEditSwatch}
+            saving={saving}
+            error={formError}
+          />
+        )}
+      </Modal>
 
       {/* Outside the isOpen block so a collapsed group can still be renamed. */}
       <Modal isOpen={isRenaming} onClose={() => { setIsRenaming(false); setRenameError(null) }} title="Rename Material">

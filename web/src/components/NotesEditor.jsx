@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ImagePlus, Pencil, Trash2, Undo2, X } from 'lucide-react'
 import NotesBlockList from './NotesBlockList.jsx'
 import { sanitizeText } from '../lib/textInput.js'
+import FieldLabel from './FieldLabel.jsx'
 
 const NOTE_COLORS = ['#000000', '#ef4444', '#2563eb', '#16a34a']
 // Matches the NotesBlock.value cap in the API schema. The Contact page invites customers to
@@ -194,7 +195,7 @@ export default function NotesEditor({ selectionBlocks, onChange }) {
 
   return (
     <div>
-      <p className="text-sm font-semibold text-black">Notes</p>
+      <FieldLabel as="p" optional hint="Anything we should know — sizing, fit, a sketch or a photo.">Notes</FieldLabel>
       <div className="mt-2 rounded-lg border border-gray-300 bg-white p-3">
         {selectionBlocks.length > 0 && (
           <div className="mb-3 border-b border-gray-100 pb-3">

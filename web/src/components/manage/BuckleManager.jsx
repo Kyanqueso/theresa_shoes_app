@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Plus, Trash2, Undo2 } from 'lucide-react'
+import { Pencil, Plus, Trash2, Undo2 } from 'lucide-react'
 import ImagePlaceholder from '../ImagePlaceholder.jsx'
 import ConfirmButton from '../ConfirmButton.jsx'
 import LoadingSpinner from '../LoadingSpinner.jsx'
 import Modal from './Modal.jsx'
-import ImageDropzone from './ImageDropzone.jsx'
+import ImageOptionForm from './ImageOptionForm.jsx'
 import {
   createAttributeOption,
   deleteAttributeOption,
@@ -12,53 +12,9 @@ import {
   updateAttributeOption,
   uploadAttributeImage,
 } from '../../lib/attributesApi.js'
-import { sanitizeText } from '../../lib/textInput.js'
 import { errorDetail } from '../../lib/apiClient.js'
 
-function AddBuckleForm({ onCancel, onSave, saving, error }) {
-  const [name, setName] = useState('')
-  const [file, setFile] = useState(null)
-  const previewUrl = file ? URL.createObjectURL(file) : null
-
-  return (
-    <div className="flex flex-col gap-4 text-left">
-      <ImageDropzone label="Upload Buckle Image (1 only allowed)" previewUrl={previewUrl} onFileSelect={setFile} />
-
-      <div>
-        <label className="text-sm font-semibold text-black">Buckle Name</label>
-        <input
-          type="text"
-          value={name}
-          maxLength={50}
-          onChange={(event) => setName(sanitizeText(event.target.value))}
-          className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30"
-        />
-      </div>
-
-      {error && <p className="text-sm font-semibold text-danger">{error}</p>}
-
-      <div className="mt-2 flex justify-end gap-3">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="rounded-lg bg-danger px-5 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          disabled={!name.trim() || !file || saving}
-          onClick={() => onSave({ name: name.trim(), file })}
-          className="rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-        >
-          {saving ? 'Saving…' : 'Add'}
-        </button>
-      </div>
-    </div>
-  )
-}
-
-function BuckleCard({ buckle, onDelete, onDragStart, onToggle }) {
+function BuckleCard({ buckle, onDelete, onDragStart, onToggle, onEdit }) {
   const outOfStock = !buckle.is_active
   return (
     <div
@@ -66,12 +22,21 @@ function BuckleCard({ buckle, onDelete, onDragStart, onToggle }) {
       onDragStart={(event) => onDragStart(event, buckle.id)}
       className="relative flex cursor-grab flex-col items-center gap-2 rounded-lg bg-white p-2"
     >
+      <button
+        type="button"
+        onClick={() => onEdit(buckle)}
+        aria-label={`Edit ${buckle.name}`}
+        title="Edit name and image"
+        className="absolute right-8 top-1 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-white"
+      >
+        <Pencil size={12} />
+      </button>
       <ConfirmButton
         label=""
         icon={Trash2}
         question={`Delete "${buckle.name}"?`}
         onConfirm={() => onDelete(buckle)}
-        triggerClassName="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-danger text-white"
+        triggerClassName="absolute right-1 top-1 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-danger text-white"
       />
       {buckle.image_url ? (
         <img src={buckle.image_url} alt={buckle.name} className="aspect-square w-full rounded-md object-cover" />
@@ -100,6 +65,7 @@ export default function BuckleManager() {
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
   const [isAdding, setIsAdding] = useState(false)
+  const [editingBuckle, setEditingBuckle] = useState(null)
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
 
@@ -139,6 +105,22 @@ export default function BuckleManager() {
       refresh()
     } catch (err) {
       setFormError(errorDetail(err, 'Could not add this buckle. Please try again.'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleEdit = async ({ name, file }) => {
+    const buckle = editingBuckle
+    setSaving(true)
+    setFormError(null)
+    try {
+      if (name !== buckle.name) await updateAttributeOption(buckle.id, { name })
+      if (file) await uploadAttributeImage(buckle.id, file)
+      setEditingBuckle(null)
+      refresh()
+    } catch (err) {
+      setFormError(errorDetail(err, 'Could not save this buckle. Please try again.'))
     } finally {
       setSaving(false)
     }
@@ -207,7 +189,7 @@ export default function BuckleManager() {
             className="mt-2 grid min-h-24 grid-cols-3 gap-4 rounded-lg bg-white p-3 sm:grid-cols-5"
           >
             {available.map((buckle) => (
-              <BuckleCard key={buckle.id} buckle={buckle} onDelete={handleDelete} onDragStart={handleDragStart} onToggle={handleToggle} />
+              <BuckleCard key={buckle.id} buckle={buckle} onDelete={handleDelete} onDragStart={handleDragStart} onToggle={handleToggle} onEdit={setEditingBuckle} />
             ))}
           </div>
 
@@ -220,14 +202,36 @@ export default function BuckleManager() {
             className="mt-2 grid min-h-24 grid-cols-3 gap-4 rounded-lg bg-gray-100 p-3 sm:grid-cols-5"
           >
             {unavailable.map((buckle) => (
-              <BuckleCard key={buckle.id} buckle={buckle} onDelete={handleDelete} onDragStart={handleDragStart} onToggle={handleToggle} />
+              <BuckleCard key={buckle.id} buckle={buckle} onDelete={handleDelete} onDragStart={handleDragStart} onToggle={handleToggle} onEdit={setEditingBuckle} />
             ))}
           </div>
         </>
       )}
 
-      <Modal isOpen={isAdding} onClose={() => setIsAdding(false)} title="Add Buckle">
-        <AddBuckleForm onCancel={() => setIsAdding(false)} onSave={handleAdd} saving={saving} error={formError} />
+      <Modal isOpen={isAdding} onClose={() => { setIsAdding(false); setFormError(null) }} title="Add Buckle">
+        <ImageOptionForm
+          nameLabel="Buckle Name"
+          imageLabel="Buckle Image"
+          onCancel={() => { setIsAdding(false); setFormError(null) }}
+          onSave={handleAdd}
+          saving={saving}
+          error={formError}
+        />
+      </Modal>
+
+      <Modal isOpen={editingBuckle !== null} onClose={() => { setEditingBuckle(null); setFormError(null) }} title="Edit Buckle">
+        {editingBuckle && (
+          <ImageOptionForm
+            key={editingBuckle.id}
+            nameLabel="Buckle Name"
+            imageLabel="Buckle Image"
+            initial={editingBuckle}
+            onCancel={() => { setEditingBuckle(null); setFormError(null) }}
+            onSave={handleEdit}
+            saving={saving}
+            error={formError}
+          />
+        )}
       </Modal>
     </div>
   )

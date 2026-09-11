@@ -3,13 +3,14 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 from fastapi import HTTPException, status
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from app.config.timezone import business_today
+from app.config.timezone import business_today, to_business
 from app.db.models import CompanyStatus, Order, OrderStatus, Payment
 from app.schema.order import OrderCreate, OrderUpdate
 from app.services import company_service, image_service, payment_service
+from app.services.search import parse_order_number
 
 
 def compute_order_total(unit_price: float | Decimal, quantity: int) -> Decimal:
@@ -33,7 +34,12 @@ def _order_query(db: Session, company_id, status, search, completed):
     elif completed is False:
         query = query.filter(Order.completed_at.is_(None))
     if search:
-        query = query.filter(Order.client_name.ilike(f"%{search.strip()}%"))
+        term = search.strip()
+        matches = [Order.client_name.ilike(f"%{term}%")]
+        number = parse_order_number(term)
+        if number is not None:
+            matches.append(Order.order_number == number)
+        query = query.filter(or_(*matches))
     return query
 
 
@@ -166,6 +172,23 @@ def update_order(db: Session, order_id: uuid.UUID, data: OrderUpdate) -> Order |
             order.archived_at = datetime.now(timezone.utc)
         elif new_status != OrderStatus.archived:
             order.archived_at = None
+    # A picked calendar day replaces only the date part: the original time of day is kept so
+    # orders placed on the same day still sort in the order they actually arrived.
+    new_order_date = changes.pop("order_date", None)
+    if new_order_date is not None:
+        local = to_business(order.created_at)
+        order.created_at = local.replace(
+            year=new_order_date.year, month=new_order_date.month, day=new_order_date.day
+        )
+
+    # Photos and drawings dropped from the notes belong to this order alone — once the new
+    # notes no longer reference them, nothing ever will, so they go from Storage too.
+    removed_note_images: list[str] = []
+    if "notes_blocks" in changes:
+        before = set(image_service.collect_notes_image_urls(order.notes_blocks))
+        after = set(image_service.collect_notes_image_urls(changes["notes_blocks"]))
+        removed_note_images = sorted(before - after)
+
     for field, value in changes.items():
         setattr(order, field, value)
 
@@ -176,6 +199,7 @@ def update_order(db: Session, order_id: uuid.UUID, data: OrderUpdate) -> Order |
 
     db.commit()
     db.refresh(order)
+    image_service.delete_images(removed_note_images)
     return order
 
 

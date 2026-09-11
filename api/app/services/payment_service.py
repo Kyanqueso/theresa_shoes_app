@@ -3,12 +3,13 @@ from datetime import datetime, timezone
 from decimal import ROUND_HALF_UP, Decimal
 
 from fastapi import HTTPException, status
-from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy import func, or_
+from sqlalchemy.orm import Session, contains_eager
 
 from app.config.timezone import business_today
 from app.db.models import Order, OrderStatus, Payment
 from app.schema.payment import PaymentCreate, PaymentUpdate
+from app.services.search import parse_order_number
 
 
 CENTS = Decimal("0.01")
@@ -148,7 +149,9 @@ def list_payments(
 ) -> tuple[list[Payment], int]:
     """Returns (page, total). Always joins Order because every filter and sort the UI offers
     is expressed in terms of the order behind the payment."""
-    query = db.query(Payment).join(Order, Payment.order_id == Order.id)
+    # contains_eager fills payment.order from this same join. Without it, reading each row's
+    # order_number would fire one extra query per payment on the page.
+    query = db.query(Payment).join(Order, Payment.order_id == Order.id).options(contains_eager(Payment.order))
     if company_id is not None:
         query = query.filter(Order.company_id == company_id)
     if archived is True:
@@ -156,7 +159,12 @@ def list_payments(
     elif archived is False:
         query = query.filter(Order.status != OrderStatus.archived)
     if search:
-        query = query.filter(Payment.client_name.ilike(f"%{search.strip()}%"))
+        term = search.strip()
+        matches = [Payment.client_name.ilike(f"%{term}%")]
+        number = parse_order_number(term)
+        if number is not None:
+            matches.append(Order.order_number == number)
+        query = query.filter(or_(*matches))
 
     total = query.with_entities(func.count(Payment.id)).scalar() or 0
     query = query.order_by(_PAYMENT_SORTS.get(sort, _PAYMENT_SORTS["newest"]))

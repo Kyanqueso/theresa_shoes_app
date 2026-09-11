@@ -16,20 +16,20 @@ import { listShoes } from '../../lib/shoesApi.js'
 import { listAttributeOptions } from '../../lib/attributesApi.js'
 import { sanitizeText } from '../../lib/textInput.js'
 import { errorDetail } from '../../lib/apiClient.js'
+import DatePicker from '../DatePicker.jsx'
+import { toBusinessIsoDate } from '../../lib/dates.js'
 import { buildOrderSummary, notesTextFromBlocks } from '../../lib/orderSummary.js'
+import { formatOrderNumber } from '../../lib/orderNumber.js'
 
 function formatDate(value) {
   if (!value) return '—'
   return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-function shortId(id) {
-  return `#${id.slice(0, 8)}`
-}
-
 /** Maps a saved order row onto the shared summary shape. */
 function summaryForOrder(order, { companyName, shoeName, materialName, moldName, heelName }) {
   return buildOrderSummary({
+    orderNumber: order.order_number,
     modelName: shoeName,
     unitPrice: order.unit_price,
     quantity: order.quantity,
@@ -172,6 +172,7 @@ export default function OrderListPage({ companyId, mode }) {
         with_slingback: order.with_slingback,
         quantity: order.quantity,
         unit_price: order.unit_price,
+        order_date: toBusinessIsoDate(order.created_at),
       }
     }
     setDrafts(seed)
@@ -192,8 +193,11 @@ export default function OrderListPage({ companyId, mode }) {
    * whole batch with no clue which row caused it. */
   const changedDrafts = () =>
     Object.entries(drafts).filter(([orderId, draft]) => {
-      const original = orders.find((order) => order.id === orderId)
-      if (!original) return false
+      const found = orders.find((order) => order.id === orderId)
+      if (!found) return false
+      // order_date isn't a field on the order — it's derived from created_at — so it's added to
+      // the baseline here. Without it every row would look edited and be PATCHed.
+      const original = { ...found, order_date: toBusinessIsoDate(found.created_at) }
       return Object.entries(draft).some(([field, value]) => {
         const before = original[field]
         if (typeof before === 'boolean') return before !== value
@@ -241,6 +245,7 @@ export default function OrderListPage({ companyId, mode }) {
                 with_slingback: draft.with_slingback,
                 quantity: Number(draft.quantity) || 1,
                 unit_price: Number(draft.unit_price),
+                order_date: draft.order_date || undefined,
               }
           return updateOrder(orderId, payload)
         }),
@@ -346,11 +351,21 @@ export default function OrderListPage({ companyId, mode }) {
   )
 
   const rows = pageItems.map((order) => ({
-    id: shortId(order.id),
+    id: formatOrderNumber(order.order_number),
     clientName: isEditing ? textField(order, 'client_name') : order.client_name,
     contactNumber: isEditing ? textField(order, 'contact_number') : order.contact_number || '—',
     modelOrdered: modelName(order),
-    orderDate: formatDate(order.created_at),
+    orderDate:
+      isEditing && canEditField('order_date') ? (
+        <DatePicker
+          compact
+          value={drafts[order.id]?.order_date ?? ''}
+          onChange={(iso) => updateDraft(order.id, 'order_date', iso)}
+          ariaLabel={`Order date for ${order.client_name}`}
+        />
+      ) : (
+        formatDate(order.created_at)
+      ),
     ...(mode === 'completed' ? { completedDate: formatDate(order.completed_at) } : {}),
     ...(isArchiveTab ? { archivedDate: formatDate(order.archived_at) } : {}),
     size: isEditing && canEditField('size') ? numberField(order, 'size', 'w-12') : order.size ?? '—',
@@ -461,7 +476,7 @@ export default function OrderListPage({ companyId, mode }) {
       <h1 className="text-2xl font-bold text-black">{heading}</h1>
 
       <ListToolbar
-        searchPlaceholder="Search Client Name..."
+        searchPlaceholder="Search client name or order ID..."
         search={search}
         onSearchChange={(value) => { setSearch(value); setPage(1) }}
         activeTab={activeTab}
@@ -553,7 +568,21 @@ export default function OrderListPage({ companyId, mode }) {
         isSubmitting={isTransferring}
       />
 
-      <NotesViewOverlay isOpen={notesOrder !== null} onClose={() => setNotesOrder(null)} blocks={notesOrder?.notes_blocks ?? []} />
+      <NotesViewOverlay
+        // Remounted per order so one order's unsaved edits can never appear on another's.
+        key={notesOrder?.id ?? 'closed'}
+        isOpen={notesOrder !== null}
+        onClose={() => setNotesOrder(null)}
+        blocks={notesOrder?.notes_blocks ?? []}
+        // Open orders only: completed orders keep just their contact details editable, and
+        // archived ones are read-only altogether.
+        canEdit={!isArchiveTab && !isCompletedView}
+        onSave={async (blocks) => {
+          const updated = await updateOrder(notesOrder.id, { notes_blocks: blocks })
+          setNotesOrder(updated)
+          refresh()
+        }}
+      />
 
       <AddOrderOverlay
         isOpen={isAddOpen}

@@ -10,6 +10,7 @@ import LoadingSpinner from '../../components/LoadingSpinner.jsx'
 import { createCompany, deleteCompany, listCompanies, updateCompany } from '../../lib/companiesApi.js'
 import { sanitizeText } from '../../lib/textInput.js'
 import { usePagination } from '../../lib/usePagination.js'
+import FieldLabel from '../../components/FieldLabel.jsx'
 
 function formatDate(value) {
   return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -22,13 +23,13 @@ function CompanyForm({ initial, onCancel, onSave, saving, error }) {
   return (
     <div className="flex flex-col gap-4 text-left">
       <div>
-        <label className="text-sm font-semibold text-black">Company Name</label>
+        <FieldLabel>Company Name</FieldLabel>
         <input
           type="text"
           value={name}
           maxLength={50}
           onChange={(event) => setName(sanitizeText(event.target.value))}
-          className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30"
+          className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30"
         />
       </div>
 

@@ -17,6 +17,7 @@ import { listPayments } from '../../lib/paymentsApi.js'
 import { listCompanies } from '../../lib/companiesApi.js'
 import { getAnalyticsOverview } from '../../lib/analyticsApi.js'
 import { paymentFulfillment, PAYMENT_STATUS } from '../../lib/paymentStatus.js'
+import { formatOrderNumber } from '../../lib/orderNumber.js'
 
 const MONTH_LABELS = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
@@ -238,7 +239,7 @@ export default function Analytics() {
     const rows = (stats.activeOrders ?? []).map((order) => {
       const payment = (stats.activePayments ?? []).find((item) => item.order_id === order.id)
       return [
-        order.id,
+        formatOrderNumber(order.order_number),
         order.company_id ? companyName(order.company_id) : '—',
         order.client_name,
         order.custom_model_name ?? '—',

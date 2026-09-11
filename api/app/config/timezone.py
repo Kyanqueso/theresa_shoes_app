@@ -7,6 +7,21 @@ from datetime import date, datetime, timedelta, timezone
 BUSINESS_TZ = timezone(timedelta(hours=8), name="UTC+8")
 
 
+# The shop keeps records going back to 1998, so that's how far back any order or payment
+# date may be set. Anything earlier is a typo, not history.
+EARLIEST_RECORD_DATE = date(1998, 1, 1)
+
+
+def validate_record_date(value: date, what: str) -> date:
+    """Rejects dates in the future or before records began. Shared by every editable date so
+    the rule — and its wording — is the same everywhere."""
+    if value > business_today():
+        raise ValueError(f"{what} can't be in the future.")
+    if value < EARLIEST_RECORD_DATE:
+        raise ValueError(f"{what} can't be before {EARLIEST_RECORD_DATE.year}.")
+    return value
+
+
 def business_now() -> datetime:
     """Current time as the shop experiences it."""
     return datetime.now(BUSINESS_TZ)

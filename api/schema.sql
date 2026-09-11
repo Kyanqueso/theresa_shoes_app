@@ -194,6 +194,27 @@ alter table orders
     add column if not exists archived_with_company boolean not null default false,
     alter column shoe_id drop not null;
 
+-- Human-readable order number, shown as ORDER-001. Comes from a sequence rather than row
+-- position: deleting an order must never renumber the ones after it, or a number someone
+-- wrote down last week would start pointing at a different order. Re-runnable: existing
+-- orders are numbered oldest-first, continuing after any numbers already handed out.
+create sequence if not exists orders_order_number_seq;
+alter table orders add column if not exists order_number integer;
+with ranked as (
+    select id, row_number() over (order by created_at, id) as rn
+    from orders
+    where order_number is null
+)
+update orders o
+   set order_number = (select coalesce(max(order_number), 0) from orders) + r.rn
+  from ranked r
+ where o.id = r.id;
+select setval('orders_order_number_seq', (select coalesce(max(order_number), 0) + 1 from orders), false);
+alter table orders alter column order_number set default nextval('orders_order_number_seq');
+alter table orders alter column order_number set not null;
+alter sequence orders_order_number_seq owned by orders.order_number;
+create unique index if not exists ix_orders_order_number on orders(order_number);
+
 create index if not exists ix_orders_company_id on orders(company_id);
 create index if not exists ix_orders_status on orders(status);
 create index if not exists ix_orders_created_at on orders(created_at);

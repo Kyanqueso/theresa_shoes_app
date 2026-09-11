@@ -1,10 +1,10 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.config.timezone import business_today, to_business
+from app.config.timezone import to_business, validate_record_date
 from app.db.models import OrderStatus
 
 NotesBlockType = Literal[
@@ -64,10 +64,7 @@ class OrderCreate(OrderBase):
         if value is None:
             return value
         value = to_business(value)
-        if value.date() > business_today():
-            raise ValueError("Order date can't be in the future.")
-        if value.year < 2000:
-            raise ValueError("Order date can't be before the year 2000.")
+        validate_record_date(value.date(), "Order date")
         return value
 
 
@@ -95,12 +92,21 @@ class OrderUpdate(BaseModel):
     unit_price: float | None = Field(default=None, gt=0)
     status: OrderStatus | None = None
     notes_blocks: list[NotesBlock] | None = Field(default=None, max_length=20)
+    # A calendar date, not a timestamp: the admin picks a day. The service keeps the order's
+    # existing time of day so orders placed on the same day stay in the order they came in.
+    order_date: date | None = None
+
+    @field_validator("order_date")
+    @classmethod
+    def _validate_order_date(cls, value: date | None) -> date | None:
+        return value if value is None else validate_record_date(value, "Order date")
 
 
 class OrderOut(OrderBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    order_number: int
     status: OrderStatus
     created_at: datetime
     completed_at: datetime | None = None
