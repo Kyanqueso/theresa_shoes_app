@@ -15,6 +15,15 @@ export function listOrders({ companyId, status, search, completed, sort, limit, 
   return apiFetch(`/orders${query ? `?${query}` : ''}`)
 }
 
+/** Past clients, each with the company and contact number to fill in for them.
+ *
+ * Only paired shop devices may read this — it carries customers' phone numbers, and the order
+ * form is open to anyone with the link. Unpaired browsers get a 403, which callers treat as
+ * "no suggestions" and fall back to a plain name field. */
+export function listClientSuggestions() {
+  return apiFetch('/orders/clients', { skipAuth: true })
+}
+
 export function createOrder(payload) {
   return apiFetch('/orders', { method: 'POST', body: payload, skipAuth: true })
 }

@@ -4,6 +4,7 @@ import NotesBlockList from './NotesBlockList.jsx'
 import { uploadNotesImage } from '../lib/ordersApi.js'
 import { errorDetail } from '../lib/apiClient.js'
 import { sanitizeText } from '../lib/textInput.js'
+import { formatOrderNumber } from '../lib/orderNumber.js'
 
 // Mirrors the order's own picks (material, mold, heel...). They're generated from those
 // choices, not written by hand, so they're shown but never offered for editing here.
@@ -32,7 +33,16 @@ function toDraft(blocks) {
  * Text can be changed or removed, photos and drawings can be removed, and new text or photos
  * added. Anything taken out is deleted from storage by the server once the save lands.
  */
-export default function NotesViewOverlay({ isOpen, onClose, blocks, canEdit = false, onSave }) {
+export default function NotesViewOverlay({
+  isOpen,
+  onClose,
+  blocks,
+  orderNumber,
+  clientName,
+  modelName,
+  canEdit = false,
+  onSave,
+}) {
   const [isEditing, setIsEditing] = useState(false)
   const [draft, setDraft] = useState([])
   const [saving, setSaving] = useState(false)
@@ -48,6 +58,15 @@ export default function NotesViewOverlay({ isOpen, onClose, blocks, canEdit = fa
   if (!isOpen) return null
 
   const selectionBlocks = blocks.filter((block) => SELECTION_TYPES.has(block.type))
+
+  // The table renders "—" where a model isn't set; that's a placeholder, not a name.
+  const subtitle = [
+    orderNumber != null && formatOrderNumber(orderNumber),
+    clientName,
+    modelName && modelName !== '—' && modelName,
+  ]
+    .filter(Boolean)
+    .join(' · ')
 
   const startEditing = () => {
     setDraft(toDraft(blocks))
@@ -122,8 +141,14 @@ export default function NotesViewOverlay({ isOpen, onClose, blocks, canEdit = fa
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-3 border-b border-black/10 px-6 py-4">
-          <h3 className="text-lg font-bold text-black">{isEditing ? 'Edit Notes' : 'Notes'}</h3>
-          <div className="flex items-center gap-2">
+          {/* Whose order this is and what was ordered. Several orders can look alike in the
+              table, and notes are read while the shoe is being made — the pair of them says
+              which order these notes belong to without going back to close the overlay. */}
+          <div className="min-w-0">
+            <h3 className="text-lg font-bold text-black">{isEditing ? 'Edit Notes' : 'Notes'}</h3>
+            {subtitle && <p className="truncate text-sm text-gray-600">{subtitle}</p>}
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
             {canEdit && !isEditing && (
               <button
                 type="button"

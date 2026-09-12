@@ -15,7 +15,7 @@ import CloseMatchCompanyOverlay from '../components/CloseMatchCompanyOverlay.jsx
 import { getShoe, listShoes } from '../lib/shoesApi.js'
 import { listAttributeOptions } from '../lib/attributesApi.js'
 import { listCompanies } from '../lib/companiesApi.js'
-import { createOrder, uploadNotesImage } from '../lib/ordersApi.js'
+import { createOrder, listClientSuggestions, uploadNotesImage } from '../lib/ordersApi.js'
 import { ApiError } from '../lib/apiClient.js'
 import { sanitizeText } from '../lib/textInput.js'
 import { isDeviceRecognized, verifyPin } from '../lib/auth.js'
@@ -178,7 +178,73 @@ function CompanyCombobox({ companies, value, onChange }) {
   )
 }
 
-function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
+/** The client name field: type a new customer, or pick one the shop has served before.
+ *
+ * Repeat customers are the normal case here, and their number was already typed once. Picking
+ * a name brings back the company and number from their last order (see the client() handler in
+ * ShoeOrderPanel), so a repeat order is three fields of typing less and the number can't drift
+ * between orders. The list is empty on browsers that aren't paired shop devices, and then this
+ * behaves exactly like the plain text box it replaced.
+ *
+ * Entries are per name *and* company, because two different people can share a name.
+ */
+function ClientCombobox({ clients, value, onChange, onSelect }) {
+  const [isOpen, setIsOpen] = useState(false)
+  const containerRef = useRef(null)
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (containerRef.current && !containerRef.current.contains(event.target)) setIsOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const filtered = clients.filter((client) =>
+    client.client_name.toLowerCase().includes(value.trim().toLowerCase()),
+  )
+
+  return (
+    <div ref={containerRef} className="relative">
+      <FieldLabel>Client Name</FieldLabel>
+      <input
+        type="text"
+        value={value}
+        maxLength={50}
+        onChange={(event) => {
+          onChange(sanitizeText(event.target.value))
+          setIsOpen(true)
+        }}
+        onFocus={() => setIsOpen(true)}
+        placeholder={clients.length > 0 ? 'Search or type a new name' : undefined}
+        autoComplete="off"
+        className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30"
+      />
+      {isOpen && filtered.length > 0 && (
+        <div className="absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+          {filtered.map((client) => (
+            <button
+              key={`${client.client_name}-${client.company_name ?? ''}`}
+              type="button"
+              onClick={() => {
+                onSelect(client)
+                setIsOpen(false)
+              }}
+              className="block w-full px-3 py-2 text-left hover:bg-accent"
+            >
+              <span className="block text-sm text-gray-700">{client.client_name}</span>
+              {client.company_name && (
+                <span className="block text-xs text-gray-500">{client.company_name}</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ShoeOrderPanel({ shoe, attributeOptions, companies, clients }) {
   const { tag } = useParams()
   const navigate = useNavigate()
   const [activeImage, setActiveImage] = useState(0)
@@ -309,6 +375,22 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
       }
     }
     return result
+  }
+
+  /** Fills the three contact fields from a returning client's last order.
+   *
+   * All three are overwritten, including a blank number: after picking a name the fields must
+   * describe that one person. Leaving a previously picked client's number sitting under a new
+   * name would be worse than an empty field — it would send the order to the wrong phone. */
+  const applyClient = (client) => {
+    setClientName(client.client_name)
+    setCompanyName(client.company_name ?? '')
+    // The field only holds an 11-digit 09 number. Anything else on the saved order (a landline
+    // typed into the admin table, say) isn't something this input can show, so it's left blank
+    // rather than displayed wrong.
+    const saved = (client.contact_number ?? '').replace(/\D/g, '')
+    const usable = saved.length === CONTACT_LENGTH && saved.startsWith(CONTACT_PREFIX)
+    setContactNumber(usable ? saved : CONTACT_PREFIX)
   }
 
   const sizeValue = Number(size)
@@ -524,6 +606,23 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
         <p className="mt-1 text-gray-600">₱{shoe.price.toLocaleString()}</p>
 
         <div className="mt-5 flex flex-col gap-5">
+          {/* Who the order is for comes before what the shoe is. It's how an order is taken
+              out loud ("this is for Gina at Matalino"), and picking a returning client here
+              fills in their company and number before any of the specs are touched. */}
+          <div className="grid grid-cols-1 gap-4 border-b border-golden-brown/20 pb-5 sm:grid-cols-3">
+            <ClientCombobox
+              clients={clients}
+              value={clientName}
+              onChange={setClientName}
+              onSelect={applyClient}
+            />
+            <CompanyCombobox companies={companies} value={companyName} onChange={setCompanyName} />
+            <div>
+              <FieldLabel optional>Contact Number</FieldLabel>
+              <PhoneNumberInput value={contactNumber} onChange={setContactNumber} className="mt-2" />
+            </div>
+          </div>
+
           <PillGroup
             label="Select Material"
             options={(attributeOptions.material ?? []).filter((option) => !option.parent_id)}
@@ -666,24 +765,6 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies }) {
             manageLabel="Manage Buckles"
           />
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <div>
-              <FieldLabel>Client Name</FieldLabel>
-              <input
-                type="text"
-                value={clientName}
-                maxLength={50}
-                onChange={(event) => setClientName(sanitizeText(event.target.value))}
-                className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30"
-              />
-            </div>
-            <CompanyCombobox companies={companies} value={companyName} onChange={setCompanyName} />
-            <div>
-              <FieldLabel optional>Contact Number</FieldLabel>
-              <PhoneNumberInput value={contactNumber} onChange={setContactNumber} className="mt-2" />
-            </div>
-          </div>
-
           <NotesEditor selectionBlocks={selectionBlocks} onChange={setNotes} />
 
           {submitError && !isReviewOpen && <p className="text-sm font-semibold text-danger">{submitError}</p>}
@@ -774,6 +855,7 @@ export default function ShoeDetails() {
   const [shoes, setShoes] = useState([])
   const [attributeOptions, setAttributeOptions] = useState({})
   const [companies, setCompanies] = useState([])
+  const [clients, setClients] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
 
@@ -796,13 +878,22 @@ export default function ShoeDetails() {
     // getShoe(shoeId) is what actually renders this page — it returns the shoe even when it
     // is hidden, so a hidden shoe's URL no longer reports "Shoe not found". listShoes() is
     // still fetched, but only to power the Prev/Next arrows through the visible catalogue.
-    Promise.all([getShoe(shoeId), listShoes(), listAttributeOptions(), listCompanies()])
-      .then(([shoeData, shoesData, attributesData, companiesData]) => {
+    Promise.all([
+      getShoe(shoeId),
+      listShoes(),
+      listAttributeOptions(),
+      listCompanies(),
+      // Paired shop devices only. Anywhere else this is a 403, which just means the name
+      // field offers no suggestions — never a reason to fail the whole page.
+      listClientSuggestions().catch(() => []),
+    ])
+      .then(([shoeData, shoesData, attributesData, companiesData, clientsData]) => {
         if (cancelled) return
         setShoe(shoeData)
         setShoes(shoesData)
         setAttributeOptions(groupAttributeOptions(attributesData))
         setCompanies(companiesData)
+        setClients(clientsData)
       })
       .catch(() => {
         if (!cancelled) setLoadError('Could not load this shoe right now.')
@@ -866,7 +957,13 @@ export default function ShoeDetails() {
       ) : !shoe ? (
         <p className="px-6 py-12 text-center text-gray-500">Shoe not found.</p>
       ) : (
-        <ShoeOrderPanel key={shoe.id} shoe={shoe} attributeOptions={attributeOptions} companies={companies} />
+        <ShoeOrderPanel
+          key={shoe.id}
+          shoe={shoe}
+          attributeOptions={attributeOptions}
+          companies={companies}
+          clients={clients}
+        />
       )}
     </div>
   )

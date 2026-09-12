@@ -4,10 +4,10 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, 
 from PIL import UnidentifiedImageError
 from sqlalchemy.orm import Session
 
-from app.config.auth import require_admin_session
+from app.config.auth import require_admin_session, require_valid_device
 from app.db.base import get_db
 from app.db.models import OrderStatus
-from app.schema.order import NotesImageOut, OrderCreate, OrderOut, OrderPage, OrderUpdate
+from app.schema.order import ClientSuggestionOut, NotesImageOut, OrderCreate, OrderOut, OrderPage, OrderUpdate
 from app.services import order_service
 from app.services.image_service import ImageTooLargeError
 
@@ -34,6 +34,22 @@ def list_orders(
         db, company_id, status_filter, search, completed, sort, limit, offset
     )
     return OrderPage(items=items, total=total)
+
+
+# Declared before any /{order_id} route so "clients" is never read as an order id.
+@router.get(
+    "/clients",
+    response_model=list[ClientSuggestionOut],
+    dependencies=[Depends(require_valid_device)],
+)
+def list_client_suggestions(db: Session = Depends(get_db)):
+    """Past clients, for the order form's name picker.
+
+    Restricted to paired shop devices rather than public like /companies: this answers with
+    customers' names and phone numbers, and the order form itself is open to anyone with the
+    link. On an unpaired browser the name field simply stays a plain text box.
+    """
+    return order_service.list_client_suggestions(db)
 
 
 @router.post("", response_model=OrderOut, status_code=status.HTTP_201_CREATED)

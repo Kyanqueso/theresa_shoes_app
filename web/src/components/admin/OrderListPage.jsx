@@ -574,6 +574,9 @@ export default function OrderListPage({ companyId, mode }) {
         isOpen={notesOrder !== null}
         onClose={() => setNotesOrder(null)}
         blocks={notesOrder?.notes_blocks ?? []}
+        orderNumber={notesOrder?.order_number}
+        clientName={notesOrder?.client_name}
+        modelName={notesOrder ? modelName(notesOrder) : null}
         // Open orders only: completed orders keep just their contact details editable, and
         // archived ones are read-only altogether.
         canEdit={!isArchiveTab && !isCompletedView}

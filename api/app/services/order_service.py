@@ -7,7 +7,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.config.timezone import business_today, to_business
-from app.db.models import CompanyStatus, Order, OrderStatus, Payment
+from app.db.models import Company, CompanyStatus, Order, OrderStatus, Payment
 from app.schema.order import OrderCreate, OrderUpdate
 from app.services import company_service, image_service, payment_service
 from app.services.search import parse_order_number
@@ -219,3 +219,38 @@ def delete_order(db: Session, order_id: uuid.UUID) -> bool:
     db.commit()
     image_service.delete_images(image_urls)
     return True
+
+
+def list_client_suggestions(db: Session) -> list[dict]:
+    """Everyone who has ordered before, with the company and number to fill in for them.
+
+    The details come from that person's most recent order, except that a number is carried
+    forward from an older one when the latest order didn't record a number at all — the point
+    is to save typing, and the shop's last known number for someone beats no number.
+
+    Archived orders count here. Archiving voids an order, not the fact that the person exists.
+    """
+    rows = (
+        db.query(Order.client_name, Order.contact_number, Order.company_id, Company.name)
+        .outerjoin(Company, Order.company_id == Company.id)
+        .order_by(Order.created_at.desc())
+        .all()
+    )
+
+    suggestions: dict[tuple[str, uuid.UUID | None], dict] = {}
+    for client_name, contact_number, company_id, company_name in rows:
+        name = (client_name or "").strip()
+        if not name:
+            continue
+        key = (name.lower(), company_id)
+        existing = suggestions.get(key)
+        if existing is None:
+            suggestions[key] = {
+                "client_name": name,
+                "company_name": company_name,
+                "contact_number": contact_number,
+            }
+        elif not existing["contact_number"] and contact_number:
+            existing["contact_number"] = contact_number
+
+    return sorted(suggestions.values(), key=lambda item: (item["client_name"].lower(), item["company_name"] or ""))

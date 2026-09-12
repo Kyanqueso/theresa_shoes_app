@@ -123,3 +123,15 @@ class OrderPage(BaseModel):
 
     items: list[OrderOut]
     total: int
+
+
+class ClientSuggestionOut(BaseModel):
+    """One person the shop has taken an order from before, for the order form's name picker.
+
+    Keyed by name *and* company: two different people can share a name, and filling in the
+    wrong one's phone number is worse than offering two choices.
+    """
+
+    client_name: str
+    company_name: str | None = None
+    contact_number: str | None = None
