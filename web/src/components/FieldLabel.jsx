@@ -9,7 +9,13 @@
  *    nothing here can be mistaken for something to tap or type in.
  *  - gold for the accent, leaving maroon to mean one thing: "this option is selected".
  *  - 15px, bold, sentence case — the easiest of the options to read at arm's length.
- *  - optional fields say so, beside the underline rather than under it.
+ *  - optional fields say so at the far end of that line, quieter than the label itself.
+ *
+ * "Optional" sits at the right end of the rule rather than snug against the label, and never
+ * wraps: as a pill beside the label it needed ~65px that a narrow column doesn't have, so it
+ * dropped onto a second line and sat marooned between the gold underline and the faint rule,
+ * pushing that field's input out of line with its neighbours. Anchored to the far end it costs
+ * the label no width at all, so the same field looks the same on a phone and on a desktop.
  *
  * The full-width line is translucent gold rather than a fixed colour, so it stays faint but
  * visible on both the white guest card and the cream admin modals.
@@ -20,16 +26,16 @@
 export default function FieldLabel({ children, as: Tag = 'label', htmlFor, optional = false, hint, className = '' }) {
   return (
     <div className={`pb-0.5 ${className}`}>
-      <div className="flex flex-wrap items-end gap-x-2 border-b border-golden-brown/30">
+      <div className="flex items-end justify-between gap-x-3 border-b border-golden-brown/30">
         {/* -mb-px lets the 2px gold underline sit on top of the 1px rule instead of below it. */}
         <Tag
           htmlFor={Tag === 'label' ? htmlFor : undefined}
-          className="-mb-px border-b-2 border-golden-brown pb-1.5 text-[15px] font-bold leading-snug text-primary"
+          className="-mb-px min-w-0 border-b-2 border-golden-brown pb-1.5 text-[15px] font-bold leading-snug text-primary"
         >
           {children}
         </Tag>
         {optional && (
-          <span className="mb-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary/70">
+          <span className="mb-1.5 shrink-0 text-[11px] font-semibold uppercase tracking-[0.08em] text-primary/55">
             Optional
           </span>
         )}

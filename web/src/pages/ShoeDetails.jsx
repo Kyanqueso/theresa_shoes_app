@@ -609,13 +609,18 @@ function ShoeOrderPanel({ shoe, attributeOptions, companies, clients }) {
           {/* Who the order is for comes before what the shoe is. It's how an order is taken
               out loud ("this is for Gina at Matalino"), and picking a returning client here
               fills in their company and number before any of the specs are touched. */}
-          <div className="grid grid-cols-1 gap-4 border-b border-golden-brown/20 pb-5 sm:grid-cols-3">
-            <ClientCombobox
-              clients={clients}
-              value={clientName}
-              onChange={setClientName}
-              onSelect={applyClient}
-            />
+          {/* Two columns, not three: split three ways this card leaves each label about 130px,
+              which "Contact Number" alone already fills. The client's name takes the full width
+              it deserves, and the two shorter fields share the row below it. */}
+          <div className="grid grid-cols-1 gap-4 border-b border-golden-brown/20 pb-5 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <ClientCombobox
+                clients={clients}
+                value={clientName}
+                onChange={setClientName}
+                onSelect={applyClient}
+              />
+            </div>
             <CompanyCombobox companies={companies} value={companyName} onChange={setCompanyName} />
             <div>
               <FieldLabel optional>Contact Number</FieldLabel>
