@@ -41,6 +41,21 @@ def create_pairing_code(db: Session) -> DevicePairingCode:
     return record
 
 
+def has_live_pairing_code(db: Session) -> bool:
+    """True while a code issued from Admin → Devices is still unused and unexpired.
+
+    This is what lets an unrecognised browser show the pairing keypad only in the ten minutes
+    the shop actually opened: outside that window there is nothing to type, so the screen says
+    so instead of presenting a keypad to every passer-by.
+    """
+    return (
+        db.query(DevicePairingCode.id)
+        .filter(DevicePairingCode.used_at.is_(None), DevicePairingCode.expires_at > _now())
+        .first()
+        is not None
+    )
+
+
 def claim_pairing_code(db: Session, code: str, label: str | None, pin: str) -> Device:
     """Redeems a code and returns the newly created Device, whose token the caller stores.
 

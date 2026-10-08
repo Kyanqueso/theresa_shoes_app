@@ -10,12 +10,14 @@ export default function Forbidden() {
       title="Access Denied"
       message="This device isn't authorized to view this page."
     >
-      {/* Without this an unrecognised device is simply stuck — pairing is the way back in. */}
+      {/* Without this an unrecognised device is simply stuck. The login screen is the way back
+          in for both kinds of visitor: it shows the PIN pad to a known device and the pairing
+          steps to one the shop hasn't added yet. */}
       <Link
-        to="/pair"
+        to="/login"
         className="mt-4 text-sm font-semibold text-primary underline underline-offset-4"
       >
-        Pair this device
+        Set up this device
       </Link>
     </ErrorPage>
   )

@@ -44,6 +44,17 @@ class PairingCodeOut(BaseModel):
     expires_at: datetime
 
 
+class PairingOpenOut(BaseModel):
+    """Whether a pairing code is live right now — and nothing else.
+
+    Public, because the device that needs the answer has no token yet. It says only that the
+    shop is in the middle of adding a device, never which code, so knowing it gets a stranger
+    no closer to claiming one.
+    """
+
+    is_open: bool
+
+
 class ClaimDeviceIn(BaseModel):
     code: str
     # Shown in the admin device list so the owner can tell one device from another.

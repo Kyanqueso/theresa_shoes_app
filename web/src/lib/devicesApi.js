@@ -5,6 +5,20 @@ export function issuePairingCode() {
   return apiFetch('/auth/devices/pairing-code', { method: 'POST' })
 }
 
+/** Whether the shop has a pairing code live right now.
+ *
+ * Public — asked by browsers that have no token yet, to decide whether to offer the pairing
+ * keypad at all. Never raises: anything other than a clear "yes" is treated as "no code to
+ * type", which shows the "ask the shop" screen rather than a keypad. */
+export async function isPairingOpen() {
+  try {
+    const { is_open: isOpen } = await apiFetch('/auth/devices/pairing-open', { skipAuth: true })
+    return Boolean(isOpen)
+  } catch {
+    return false
+  }
+}
+
 /** Redeems a code and stores the returned token for this browser.
  * skipAuth because a device being paired has no token or session yet — this is the one
  * call that has to work from an unrecognised browser. */

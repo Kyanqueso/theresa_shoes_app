@@ -6,7 +6,14 @@ from sqlalchemy.orm import Session
 from app.config.auth import require_admin_session
 from app.db.base import get_db
 from app.db.models import Device
-from app.schema.auth import ClaimDeviceIn, ClaimDeviceOut, DeviceOut, DeviceUpdate, PairingCodeOut
+from app.schema.auth import (
+    ClaimDeviceIn,
+    ClaimDeviceOut,
+    DeviceOut,
+    DeviceUpdate,
+    PairingCodeOut,
+    PairingOpenOut,
+)
 from app.services import device_service
 
 router = APIRouter(prefix="/auth/devices", tags=["devices"])
@@ -20,6 +27,16 @@ router = APIRouter(prefix="/auth/devices", tags=["devices"])
 def issue_pairing_code(db: Session = Depends(get_db)):
     record = device_service.create_pairing_code(db)
     return PairingCodeOut(code=record.code, expires_at=record.expires_at)
+
+
+@router.get("/pairing-open", response_model=PairingOpenOut)
+def pairing_open(db: Session = Depends(get_db)):
+    """Public: tells an unrecognised browser whether there's a code to type in right now.
+
+    The login screen asks this before showing a keypad, so the pairing step only appears
+    during the ten minutes the shop opened by tapping Add Device.
+    """
+    return PairingOpenOut(is_open=device_service.has_live_pairing_code(db))
 
 
 @router.post("/claim", response_model=ClaimDeviceOut, status_code=status.HTTP_201_CREATED)
